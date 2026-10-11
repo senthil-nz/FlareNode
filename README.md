@@ -21,6 +21,10 @@ FlareNode was submitted to the IEEE Impact Challenge 2026; the result was not kn
 
 Taken on a Galaxy S20 FE in central Wellington with the demo accounts. Markers are red for hazards, blue for infrastructure, green for responders.
 
+<img src="docs/screenshots/dashboard.jpg" width="800" alt="The Mothership dashboard: a live map of markers, connected phones, responder accounts and exports">
+
+The Mothership dashboard, in a browser: every marker the phones have reported, which phones are connected, responder accounts and exports.
+
 ## 🚦 Current Status
 
 **Last Updated:** October 11, 2026
