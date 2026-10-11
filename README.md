@@ -16,14 +16,14 @@ FlareNode was submitted to the IEEE Impact Challenge 2026; the result was not kn
 
 **In progress:** FlareNode's own open-source radios, to replace Google Nearby Connections. Bluetooth, Wi-Fi Aware and the local network are written and have connected and carried markers on two phones. They are switched on only in the separate Mesh Lab build until proven. See [Phone-to-Phone Mesh](#-phone-to-phone-mesh).
 
-**Getting the app:** build it from source with the [Quick Start](#-quick-start-android-windows) below. No ready-made installer is published in this repository yet. When one is, it will be on the repository's Releases page, not committed to the code.
+**Getting the app:** Android installers for the normal app and for Mesh Lab are on the [Releases page](../../releases), with install notes, or build from source with the [Quick Start](#-quick-start-android-windows) below. The installers are signed with a debug key and have no server address built in: you run your own Mothership and enter its address on the login screen.
 
 This repository starts from the Ditto-free code; earlier versions are not part of its history.
 
 | Platform | State |
 |---|---|
 | Android | Runs on two test phones (Galaxy S20 FE on Android 13, Galaxy S24+ on Android 16) from a standalone release build |
-| iOS | Compiles on EAS Build as a simulator build, last on October 8 after Ditto was removed. Never run on a device or simulator. The phone-to-phone radios are Android-only for now. |
+| iOS | Compiles on EAS Build as a simulator build, last on October 8 after Ditto was removed. Never run on a device or simulator. **No phone-to-phone sync:** the radio layer is written for Android only and has not been written for iPhone, so on iOS markers would travel only through the Mothership. |
 | Mothership | Runs locally on Windows with SQLite; dashboard in the browser |
 
 ### ✅ Working
@@ -444,7 +444,7 @@ Contributions are welcome and are accepted under the same licence.
 
 ## 🚀 Next Steps
 
-1. Use 3.0.0-rc.2 for a while, then publish 3.0.0 with installers
+1. Use 3.0.0-rc.2 for a while, then publish 3.0.0
 2. Finish proving FlareNode's own radios in Mesh Lab: Wi-Fi Aware by itself with logs from both phones, Bluetooth with Nearby switched off, reconnecting after a drop, and measured range
 3. Test with three phones, including one relaying between two that cannot reach each other
 4. Move the normal app onto its own radios and remove Google Nearby Connections
