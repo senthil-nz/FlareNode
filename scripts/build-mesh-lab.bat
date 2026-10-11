@@ -33,6 +33,11 @@ rem copied to a place of its own. install-app.bat installs FlareNode from its
 rem own copy and is not affected by this build.
 if not exist "%LABDIR%" mkdir "%LABDIR%"
 
+rem Expo writes the app settings (from app.json) into a file that is packaged
+rem in the APK, and Gradle then reuses that file even after app.json changes.
+rem Remove it so every build packages the current settings.
+if exist "%ROOT%\node_modules\expo-constants\android\build\generated\assets" rmdir /s /q "%ROOT%\node_modules\expo-constants\android\build\generated\assets"
+
 pushd "%ROOT%\android"
 call "%ROOT%\android\gradlew.bat" app:assembleRelease --console=plain ^
   -PappIdSuffix=.meshlab ^

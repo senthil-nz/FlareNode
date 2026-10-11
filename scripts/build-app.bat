@@ -30,6 +30,11 @@ if not defined JAVA_HOME (
 )
 echo Using JAVA_HOME=%JAVA_HOME%
 
+rem Expo writes the app settings (from app.json) into a file that is packaged
+rem in the APK, and Gradle then reuses that file even after app.json changes.
+rem Remove it so every build packages the current settings.
+if exist "%ROOT%\node_modules\expo-constants\android\build\generated\assets" rmdir /s /q "%ROOT%\node_modules\expo-constants\android\build\generated\assets"
+
 pushd "%ROOT%\android"
 rem arm64 only keeps the APK small enough for phones that are short on storage.
 rem The lint tasks are skipped to keep the build short.
