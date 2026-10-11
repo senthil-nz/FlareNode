@@ -44,7 +44,7 @@ Each new iPhone has to be registered (step 2) and the app rebuilt before it can 
 
 - The stale `ios/` project that used to be committed was removed from git, so EAS generates the native project from `app.json`.
 - `app.json` declares local network use, Bonjour (`_http-alt._tcp.`), Face ID, and local-network HTTP for the Mothership.
-- `.easignore` keeps `demo/` and `mothership-server/` out of the upload. Without it the upload was 1.5 GB instead of 13 MB.
+- `.easignore` keeps `mothership-server/`, `tools/` and other things the app build does not need out of the upload, which is otherwise far larger.
 
 ## Rebuilding the simulator build
 

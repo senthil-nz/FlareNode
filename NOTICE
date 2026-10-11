@@ -36,7 +36,7 @@ Cryptography
   @noble/curves, @noble/ciphers, @noble/hashes, (c) Paul Miller, MIT License.
 
 Google Nearby Connections
-  The released Android app uses Google Nearby Connections through the
+  The Android app uses Google Nearby Connections through the
   play-services-nearby client library, which the build downloads. It is not
   open source and is not included in this repository. Its use is subject to
   Google's APIs Terms of Service. https://developers.google.com/terms

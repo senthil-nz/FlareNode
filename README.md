@@ -10,15 +10,15 @@ FlareNode was submitted to the IEEE Impact Challenge 2026; the result was not kn
 
 ## 🚦 Current Status
 
-**Last Updated:** October 8, 2026
+**Last Updated:** October 11, 2026
 
-**Released:** `v3.0.0-rc.2` (on `main`). Phone-to-phone sync runs on FlareNode's own mesh, and the Ditto SDK is gone, along with the Ditto account, token and licence terms it needed. The radio layer of the normal app is Google Nearby Connections, unchanged from rc.1.
+**Version:** 3.0.0-rc.2, a release candidate. Phone-to-phone sync runs on FlareNode's own mesh. The Ditto SDK that earlier versions used is gone, along with the Ditto account, token and licence terms it needed. The radio layer of the normal app is Google Nearby Connections.
 
-**New in rc.2:** FlareNode's own open-source radios, to replace Google Nearby Connections. Bluetooth, Wi-Fi Aware and the local network are written and have connected and carried markers on two phones. They are switched on only in the separate Mesh Lab build until proven. See [Phone-to-Phone Mesh](#-phone-to-phone-mesh).
+**In progress:** FlareNode's own open-source radios, to replace Google Nearby Connections. Bluetooth, Wi-Fi Aware and the local network are written and have connected and carried markers on two phones. They are switched on only in the separate Mesh Lab build until proven. See [Phone-to-Phone Mesh](#-phone-to-phone-mesh).
 
-**Android installers:** the normal app and Mesh Lab are published on the [Releases page](../../releases), with install notes. They are signed with a debug key and contain no Ditto code, login details or server secrets. Installers are published there, not committed to the repository.
+**Getting the app:** build it from source with the [Quick Start](#-quick-start-android-windows) below. No ready-made installer is published in this repository yet. When one is, it will be on the repository's Releases page, not committed to the code.
 
-The last version to use Ditto was 2.0.0-beta.1. It is not part of this repository, which starts from the Ditto-free code.
+This repository starts from the Ditto-free code; earlier versions are not part of its history.
 
 | Platform | State |
 |---|---|
@@ -28,26 +28,27 @@ The last version to use Ditto was 2.0.0-beta.1. It is not part of this repositor
 
 ### ✅ Working
 - Map on MapLibre with OpenStreetMap tiles (no Google Maps key)
-- Phone-to-phone marker sync over FlareNode's own mesh (`src/mesh`), with no internet or router needed, and a live peer count and joined/left notices by responder name. The released app uses Google Nearby Connections as its radio layer (Bluetooth and Wi-Fi)
+- Phone-to-phone marker sync over FlareNode's own mesh (`src/mesh`), with no internet or router needed, and a live peer count and joined/left notices by responder name. The normal app uses Google Nearby Connections as its radio layer (Bluetooth and Wi-Fi)
 - Mesh messages are sealed with a key made from the operational token, and every record is signed by the responder who wrote it. The app ships with a demo token (`OP-2026-S1`) that is public knowledge; set your own on every phone before real use
 - The Mothership relays markers between phones that never meet
 - Drop and remove markers; removals reach every responder
 - Removal rules: a marker can be removed by whoever added it or by an admin; only admins can clear dead zones. Every phone checks these itself, so a modified app cannot get around them
-- Hazard alerts with vibration (Task A)
-- Emergency Mode: darkened high-contrast map and larger markers (Task B)
-- Dead zones logged at the phone's GPS position, drawn on the map and exported (Task C)
+- Hazard alerts with vibration
+- Emergency Mode: darkened high-contrast map and larger markers
+- Dead zones logged at the phone's GPS position, drawn on the map and exported
 - Earthquake feed from GeoNet, shared across the mesh
 - App lock (fingerprint, face or device PIN), saved login, offline entry after first sign-in
 - Mothership address can be changed on the login screen without a rebuild
 - Mothership backend with JWT auth, marker and dead-zone sync, live dashboard, ODK/GeoJSON export
 - Responder accounts with roles (admin, responder), managed from the dashboard
-
 - Offline map packs: a Wellington city pack ships in the app, and other regions can be downloaded from the Mothership (confirmed by the project owner on a Galaxy S20 FE)
 
 ### 🧪 What has and has not been checked on phones
 
-**The normal app (Google Nearby as the radio layer; the same in rc.1 and rc.2)**
-- rc.1 was installed over 2.0.0-beta.1 on both phones on October 7 and checked by the project owner with two responders. The Galaxy S20 FE log shows the phones connecting and records crossing in both directions with nothing refused and no save or send errors
+All checks were on the two test phones.
+
+**The normal app (Google Nearby as the radio layer)**
+- Installed on both phones on October 7 and checked by the project owner with two responders. The Galaxy S20 FE log shows the phones connecting and records crossing in both directions with nothing refused and no save or send errors
 - Before that, the same mesh was checked in the Mesh Lab build: two signed-in responders, markers in both directions, removal, and sync over Bluetooth with Wi-Fi off
 
 **FlareNode's own radios (Mesh Lab build, October 8)**
@@ -82,7 +83,7 @@ See `ROADMAP.md`, `DITTO_REPLACEMENT.md` and `src/mesh/README.md` for the longer
 | Area | 2.0.0-beta.1 | Now |
 |---|---|---|
 | Phone-to-phone sync | Ditto SDK (closed source) | FlareNode's own mesh in `src/mesh`: store, sync, sealing and signing, with 90 automated tests |
-| Radio layer | Inside Ditto | Google Nearby Connections in the release; FlareNode's own Bluetooth, Wi-Fi Aware and local network radios in the Mesh Lab build |
+| Radio layer | Inside Ditto | Google Nearby Connections in the normal app; FlareNode's own Bluetooth, Wi-Fi Aware and local network radios in the Mesh Lab build |
 | Accounts and keys needed | A Ditto account, database ID and token in `.env` | None for sync. `.env` holds only the Mothership address |
 | Who may change what | Checked by the app and the Mothership | Checked by every phone: each record is signed by the responder who wrote it, against a certificate from the Mothership |
 | Privacy on the air | Ditto's | Messages sealed with a key made from the operational token |
@@ -91,14 +92,14 @@ See `ROADMAP.md`, `DITTO_REPLACEMENT.md` and `src/mesh/README.md` for the longer
 | First sign-in | Needs internet for Ditto and the Mothership | Needs the Mothership only |
 | APK size | About 120 MB | 44 MB |
 | Licence terms on a build | Ditto Binary License applied | None from Ditto. See [Third-Party Software](#%EF%B8%8F-third-party-software) |
-| iOS | Compiled with Ditto | Not rebuilt; no radio layer for iPhone yet |
+| iOS | Compiled with Ditto | Compiles without it; no radio layer for iPhone yet |
 | Existing markers | | Not carried over; the map starts empty |
 
 **Coming from 2.0.0-beta.1:** markers made with the Ditto version are not carried over, so the map starts empty. The Ditto values in an existing `.env` are no longer read and can be deleted.
 
 ## 📋 Quick Start (Android, Windows)
 
-**You need:** Node.js 18 or newer, a JDK 17 or 21, the Android SDK with `adb`, and a phone with USB debugging enabled. The project uses Expo SDK 51. Phones need Google Play services, which provides the Nearby Connections radio layer the released app uses.
+**You need:** Node.js 18 or newer, a JDK 17 or 21, the Android SDK with `adb`, and a phone with USB debugging enabled. The project uses Expo SDK 51. Phones need Google Play services, which provides the Nearby Connections radio layer the normal app uses.
 
 1. **Install dependencies**
    ```
@@ -166,7 +167,7 @@ Run these from the project root:
 They need `.env` and `mothership-server\.env` (see the `.env.example` files), a
 JDK 17 or 21, and the generated `android\` folder.
 
-These scripts are for Android. For iOS see the next section.
+These scripts are for Android. For iOS see [iOS (EAS Build)](#-ios-eas-build).
 
 ## ✅ Tests
 
@@ -210,7 +211,7 @@ How it works in detail, what it protects against and what it does not: [src/mesh
 
 | Radio | Shows in the log as | Works when | Open source | Where it runs |
 |---|---|---|---|---|
-| Google Nearby Connections | `nearby` | Bluetooth or Wi-Fi on; needs Google Play services | No | The released app, and Mesh Lab as the fallback |
+| Google Nearby Connections | `nearby` | Bluetooth or Wi-Fi on; needs Google Play services | No | The normal app, and Mesh Lab as the fallback |
 | Local network | `wifi` | Both phones on the same Wi-Fi network, or one on the other's hotspot | Yes | Mesh Lab |
 | Wi-Fi Aware | `wifi-aware` | Wi-Fi switched on, no network needed; only on phones that have Wi-Fi Aware | Yes | Mesh Lab |
 | Bluetooth Low Energy | `bluetooth` | Bluetooth on; no network of any kind. Android 10 or later | Yes | Mesh Lab |
@@ -221,7 +222,7 @@ The three open-source radios are FlareNode's own, written on what Android itself
 
 ### Mesh Lab
 
-Mesh Lab is a second build of the same app that installs next to FlareNode under its own app id and keeps its own data. It is where a radio is tried before the released app relies on it: today it runs the three open-source radios ahead of Google Nearby.
+Mesh Lab is a second build of the same app that installs next to FlareNode under its own app id and keeps its own data. It is where a radio is tried before the normal app relies on it: today it runs the three open-source radios ahead of Google Nearby.
 
 ```
 scripts\build-mesh-lab.bat
@@ -238,7 +239,7 @@ scripts\build-mesh-lab.bat
 | Sync core, tested in memory | Done |
 | Google Nearby Connections as the first radio | Done |
 | Storage, sealing, per-responder signing, Mothership relay | Done |
-| Ditto removed from the app | Done, released as 3.0.0-rc.1 |
+| Ditto removed from the app | Done, in 3.0.0-rc.1 |
 | Several radios at once | Done |
 | Own radios: local network, Bluetooth, Wi-Fi Aware | Written and connecting on two phones; being proven in Mesh Lab |
 | Google Nearby removed | Not started; after the above are proven |
@@ -276,7 +277,7 @@ The build page then shows an Install button and QR code for registered devices.
 **Notes**
 
 - In PowerShell use `npx.cmd`, not `npx`; the default execution policy blocks the script wrapper.
-- `.easignore` keeps `demo/`, `mothership-server/` and `tools/` out of the upload. Without it the upload was 1.5 GB instead of about 13 MB.
+- `.easignore` keeps `mothership-server/`, `tools/` and other things the app build does not need out of the upload, which is otherwise far larger.
 - The `ios/` folder is git-ignored; EAS generates the native project from `app.json`.
 
 The full steps are in [IOS_BUILD.md](./IOS_BUILD.md).
@@ -383,7 +384,7 @@ Packs are extracted from [Protomaps](https://protomaps.com) daily builds, which 
 ```
 Mobile Client (React Native, Expo SDK 51)
 ├── FlareNode mesh (src/mesh): store, sync, sealing, per-responder signing
-│   ├── Radio in the release: Google Nearby Connections (Bluetooth, Wi-Fi), Android only
+│   ├── Radio in the normal app: Google Nearby Connections (Bluetooth, Wi-Fi), Android only
 │   └── Own radios, Mesh Lab build only (modules/flarenode-radio): local network,
 │       Wi-Fi Aware, Bluetooth Low Energy; several can run at once
 ├── expo-sqlite (mesh records)
@@ -414,14 +415,14 @@ Tooling
 
 FlareNode no longer contains or depends on the Ditto SDK. Nothing of Ditto's is downloaded, built in or needed to run it, and Ditto's licence terms do not apply to builds from 3.0.0-rc.1 on.
 
-**Google Nearby Connections** is the radio layer of the released app. FlareNode's sync code (`src/mesh`) is its own; [Nearby Connections](https://developers.google.com/nearby/connections/overview) sits underneath it and is part of Google Play services.
+**Google Nearby Connections** is the radio layer of the normal app. FlareNode's sync code (`src/mesh`) is its own; [Nearby Connections](https://developers.google.com/nearby/connections/overview) sits underneath it and is part of Google Play services.
 
 - **Free, no account or key:** there is nothing to sign up for and no usage charge.
 - **Not open source:** it is a closed component that runs inside Google Play services, used under [Google's APIs Terms of Service](https://developers.google.com/terms). Phones without Google Play services cannot use it.
 - **Nothing of Google's is in this repository.** The build downloads the `play-services-nearby` client library.
 - **Being replaced** by FlareNode's own radios, which use only Android's Bluetooth and Wi-Fi interfaces. See [Phone-to-Phone Mesh](#-phone-to-phone-mesh).
 
-**Cryptography** comes from the MIT-licensed [noble](https://paulmillr.com/noble/) libraries. **Maps** are drawn with MapLibre from OpenStreetMap data; see Offline Map Packs for the data's terms.
+**Cryptography** comes from the MIT-licensed [noble](https://paulmillr.com/noble/) libraries. **Maps** are drawn with MapLibre from OpenStreetMap data; its terms, and the bundled fonts', are in [NOTICE](./NOTICE).
 
 This is a summary for convenience, not legal advice.
 
@@ -443,20 +444,22 @@ Contributions are welcome and are accepted under the same licence.
 
 ## 🚀 Next Steps
 
-1. Use 3.0.0-rc.2 for a while, then tag 3.0.0
+1. Use 3.0.0-rc.2 for a while, then publish 3.0.0 with installers
 2. Finish proving FlareNode's own radios in Mesh Lab: Wi-Fi Aware by itself with logs from both phones, Bluetooth with Nearby switched off, reconnecting after a drop, and measured range
 3. Test with three phones, including one relaying between two that cannot reach each other
-4. Move the released app onto its own radios and remove Google Nearby Connections
+4. Move the normal app onto its own radios and remove Google Nearby Connections
 5. Keep the mesh running in the background
 6. Add a way to cancel a responder's certificate
 7. Verify a build from a fresh clone and sign releases properly
 8. Rebuild for iOS and write the iPhone side of the radios
 9. Consider the long-range LoRa broadcast (see `ROADMAP.md`)
 
-## 📞 Support
+## 📞 Questions and Problems
 
-- Google Nearby Connections: https://developers.google.com/nearby/connections/overview
-- Expo EAS Build: https://docs.expo.dev/build/introduction/
+- Open an issue on this repository for questions, bugs and ideas.
+- If you find a security problem, please say so in an issue without the details of how to exploit it, so it can be fixed before those are public.
+
+Background reading: [Google Nearby Connections](https://developers.google.com/nearby/connections/overview), [Expo EAS Build](https://docs.expo.dev/build/introduction/).
 
 ---
 **Note:** This is an Expo project with native dependencies (MapLibre, Google Nearby Connections, and FlareNode's own radio module). The generated `android/` and `ios/` folders are git-ignored.
