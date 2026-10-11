@@ -1,0 +1,36 @@
+name: Tests
+
+# Runs the automated tests on every push and pull request. Nothing here needs
+# a phone or any secret.
+on:
+  push:
+  pull_request:
+
+jobs:
+  mesh:
+    name: Mesh sync (src/mesh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:mesh
+
+  mothership:
+    name: Mothership API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mothership-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mothership-server/package-lock.json
+      - run: npm ci
+      - run: npm test

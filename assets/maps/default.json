@@ -1,0 +1,20 @@
+{
+  "id": "wellington-city",
+  "name": "Wellington city",
+  "bbox": [
+    174.7,
+    -41.36,
+    174.9,
+    -41.2
+  ],
+  "center": [
+    174.8,
+    -41.28
+  ],
+  "zoom": 12,
+  "maxZoom": 15,
+  "tiles": 1360,
+  "bytes": 20316160,
+  "build": "20261005",
+  "attribution": "© OpenStreetMap contributors · Protomaps"
+}

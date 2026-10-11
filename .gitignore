@@ -1,0 +1,35 @@
+node_modules/
+.expo/
+dist/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+.env
+.env.local
+android/app/build/
+android/build/
+ios/build/
+
+# Expo Native Folders
+/android
+/ios
+
+# Local artifacts
+.idea/
+.expo-export/
+%ProgramData%/
+*.sqlite
+
+# Generated map packs served by the Mothership (build with tools/map-pack)
+mothership-server/maps/
+tools/map-pack/node_modules/
+
+# Build output of local native modules
+modules/*/android/build/
+
+# Demo material is kept locally, not in the repository
+demo/

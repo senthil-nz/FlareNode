@@ -1,0 +1,10 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": [
+      "expo.modules.flarenoderadio.FlareNodeLanModule",
+      "expo.modules.flarenoderadio.FlareNodeBluetoothModule",
+      "expo.modules.flarenoderadio.FlareNodeAwareModule"
+    ]
+  }
+}

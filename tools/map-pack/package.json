@@ -1,0 +1,13 @@
+{
+  "name": "flarenode-map-pack",
+  "private": true,
+  "description": "Builds offline map packs (MBTiles) for FlareNode from Protomaps daily builds",
+  "scripts": {
+    "build": "node build-pack.js"
+  },
+  "dependencies": {
+    "@protomaps/basemaps": "^5.0.0",
+    "pmtiles": "^4.0.0",
+    "sqlite3": "^5.1.7"
+  }
+}

@@ -1,0 +1,38 @@
+node_modules/
+.expo/
+dist/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+.env
+.env.local
+android/app/build/
+android/build/
+ios/build/
+
+# Expo Native Folders
+/android
+/ios
+
+# Local artifacts
+.idea/
+.expo-export/
+%ProgramData%/
+*.sqlite
+
+# Not needed to build the app (EAS reads this file instead of .gitignore)
+demo/
+mothership-server/
+.github/
+*.md
+tools/
+
+# Generated map packs served by the Mothership (build with tools/map-pack)
+mothership-server/maps/
+
+# Build output of local native modules
+modules/*/android/build/

@@ -1,0 +1,27 @@
+apply plugin: 'com.android.library'
+
+group = 'expo.modules.flarenodenearby'
+version = '0.1.0'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useDefaultAndroidSdkVersions()
+useExpoPublishing()
+
+android {
+  namespace "expo.modules.flarenodenearby"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // Google Nearby Connections: offline peer-to-peer over Bluetooth and Wi-Fi
+  implementation "com.google.android.gms:play-services-nearby:19.3.0"
+}

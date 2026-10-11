@@ -1,0 +1,38 @@
+{
+  "name": "flarenode",
+  "version": "3.0.0-rc.2",
+  "license": "Apache-2.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "test:mesh": "node --test --test-reporter=spec src/mesh/__tests__/mesh.test.js src/mesh/__tests__/meshService.test.js src/mesh/__tests__/cipher.test.js src/mesh/__tests__/storage.test.js src/mesh/__tests__/lossy.test.js src/mesh/__tests__/identity.test.js src/mesh/__tests__/multiTransport.test.js"
+  },
+  "dependencies": {
+    "@maplibre/maplibre-react-native": "10.4.2",
+    "@noble/ciphers": "1.3.0",
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
+    "@react-native-community/netinfo": "11.3.1",
+    "debug": "^4.4.3",
+    "expo": "~51.0.39",
+    "expo-asset": "~10.0.10",
+    "expo-build-properties": "~0.12.5",
+    "expo-crypto": "~13.0.2",
+    "expo-dev-client": "~4.0.29",
+    "expo-file-system": "~17.0.1",
+    "expo-keep-awake": "~13.0.2",
+    "expo-local-authentication": "~14.0.1",
+    "expo-location": "~17.0.1",
+    "expo-secure-store": "~13.0.2",
+    "expo-sqlite": "~14.0.6",
+    "react": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-safe-area-context": "4.10.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "babel-preset-expo": "~11.0.0"
+  }
+}

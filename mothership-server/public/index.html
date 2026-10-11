@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FlareNode Mothership</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <style>
+    :root {
+      --bg: #0f1419; --panel: #1a2129; --line: #2a3441; --text: #e6edf3; --muted: #8b98a5;
+      --hazard: #ff4d4d; --infrastructure: #4d79ff; --responder: #3ddc84; --ok: #3ddc84; --stale: #8b98a5; --gap: #ff9f1a; --quake: #b45cff;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    #map { flex: 1; min-width: 0; background: #dde3ea; }
+    aside { width: 340px; display: flex; flex-direction: column; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); }
+    header { flex: none; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+    h1 { margin: 0 0 4px; font-size: 18px; }
+    h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    section { flex: none; padding: 10px 18px; border-bottom: 1px solid var(--line); }
+    #status { color: var(--muted); font-size: 12px; }
+    #status.error { color: var(--hazard); }
+    .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .count { padding: 6px 8px; border-radius: 8px; background: var(--bg); text-align: center; }
+    .count b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+    .count span { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+    .gap-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13px; }
+    .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; }
+    .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .empty { color: var(--muted); font-size: 13px; }
+    #feed { flex: 1 0 190px; overflow-y: auto; border-bottom: 0; }
+    #feed li { cursor: pointer; }
+    #feed li:hover .grow { text-decoration: underline; }
+    .pin { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+    .exports { display: flex; gap: 8px; }
+    .exports button { flex: 1; }
+    .exports button, #logout { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+    .exports button:hover, #logout:hover { border-color: var(--muted); }
+    #admin li { gap: 6px; }
+    .mini { padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 11px; cursor: pointer; }
+    .mini:hover { border-color: var(--muted); }
+    .mini.danger { color: var(--hazard); }
+    .responder-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+    .responder-form input, .responder-form select { min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; font-size: 12px; }
+    .responder-form button { grid-column: 1 / -1; }
+    header { display: flex; align-items: flex-start; gap: 10px; }
+    header > div { flex: 1; min-width: 0; }
+    #login { position: fixed; inset: 0; z-index: 2000; display: flex; background: var(--bg); }
+    body.authed #login { display: none; }
+    .login-art { flex: 1; min-width: 0; background: #0b0f14 url('/login-hero.jpg') center / cover no-repeat; }
+    .login-panel { width: 400px; max-width: 100%; display: flex; flex-direction: column; justify-content: center; padding: 40px; background: var(--panel); border-left: 1px solid var(--line); }
+    .login-panel h1 { font-size: 26px; margin-bottom: 6px; }
+    .login-panel p { margin: 0 0 28px; color: var(--muted); }
+    .login-panel label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .login-panel input { width: 100%; margin-bottom: 16px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+    .login-panel input:focus-visible, .login-panel button:focus-visible { outline: 2px solid var(--infrastructure); outline-offset: 1px; }
+    #login-submit { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--infrastructure); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    #login-submit:disabled { opacity: .6; cursor: default; }
+    #login-error { min-height: 20px; margin: 12px 0 0; color: var(--hazard); font-size: 13px; }
+    #toasts { position: fixed; top: 16px; left: 60px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; width: 320px; max-width: calc(100vw - 80px); }
+    .toast { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0,0,0,.45); font-weight: 600; cursor: pointer; animation: toast-in .25s ease-out; }
+    .toast.hazard { background: #7a1616; border-color: var(--hazard); }
+    .toast.leaving { opacity: 0; transition: opacity .4s; }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+    .pin.flash { animation: pin-flash 1s ease-in-out infinite; }
+    #feed li.flash { border-radius: 6px; animation: row-flash 1s ease-in-out infinite; }
+    @keyframes pin-flash { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,.9); } 50% { transform: scale(1.5); box-shadow: 0 0 0 14px rgba(255,255,255,0); } }
+    @keyframes row-flash { 0%, 100% { background: transparent; } 50% { background: rgba(255,255,255,.16); } }
+    @media (prefers-reduced-motion: reduce) {
+      .toast { animation: none; }
+      .pin.flash { animation: none; outline: 3px solid #fff; outline-offset: 3px; }
+      #feed li.flash { animation: none; background: rgba(255,255,255,.16); }
+    }
+    @media (max-width: 760px) {
+      body { flex-direction: column; }
+      aside { width: auto; height: 45%; border-left: 0; border-top: 1px solid var(--line); }
+      #login { flex-direction: column; }
+      .login-art { flex: none; height: 34%; }
+      .login-panel { width: auto; flex: 1; justify-content: flex-start; border-left: 0; padding: 28px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="login">
+    <div class="login-art" role="img" aria-label="Two responders in a damaged city sharing a map over a mesh network"></div>
+    <form class="login-panel" id="login-form">
+      <h1>FlareNode Mothership</h1>
+      <p>Sign in to view the command dashboard.</p>
+      <label for="login-id">Responder ID</label>
+      <!-- Pre-filled with the default dev credentials for quick demo login, like the phone app -->
+      <input id="login-id" name="id" autocomplete="username" autocapitalize="none" value="admin" required>
+      <label for="login-password">Password</label>
+      <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      <button id="login-submit" type="submit">Sign in</button>
+      <div id="login-error" role="alert"></div>
+    </form>
+  </div>
+  <div id="map"></div>
+  <div id="toasts" role="status" aria-live="polite"></div>
+  <aside>
+    <header>
+      <div>
+        <h1>FlareNode Mothership</h1>
+        <div id="status">Connecting…</div>
+      </div>
+      <button id="logout" type="button">Sign out</button>
+    </header>
+    <section>
+      <h2>Markers by type</h2>
+      <div class="counts">
+        <div class="count"><b id="n-hazard">0</b><span>hazard</span></div>
+        <div class="count"><b id="n-infrastructure">0</b><span>infrastructure</span></div>
+        <div class="count"><b id="n-responder">0</b><span>responder</span></div>
+      </div>
+      <div class="gap-row"><span class="dot" style="background:transparent;border-color:var(--gap)"></span><span class="grow" id="gap-summary">Mesh dead zones: none logged</span></div>
+      <div class="gap-row"><span class="dot" style="background:transparent;border-color:var(--quake)"></span><span class="grow" id="quake-summary">Earthquakes (GeoNet): loading…</span></div>
+    </section>
+    <section>
+      <h2>Connected phones</h2>
+      <ul id="uplinks"></ul>
+    </section>
+    <section>
+      <h2>Export (CSV / GeoJSON)</h2>
+      <div class="exports">
+        <button type="button" data-export="/api/export/odk" data-filename="flarenode_export_odk.csv" title="All markers as ODK-compatible CSV">ODK CSV</button>
+        <button type="button" data-export="/api/export/geojson" data-filename="flarenode_markers.geojson" title="All markers as GeoJSON">Markers</button>
+        <button type="button" data-export="/api/export/gaps" data-filename="flarenode_dead_zones.geojson" title="Mesh dead zones as GeoJSON">Dead zones</button>
+      </div>
+    </section>
+    <section id="admin" hidden>
+      <h2>Responders</h2>
+      <ul id="responders"></ul>
+      <form id="responder-form" class="responder-form">
+        <input id="new-id" placeholder="ID" autocapitalize="none" autocomplete="off" required>
+        <input id="new-name" placeholder="Name" autocomplete="off" required>
+        <input id="new-password" type="password" placeholder="Password (8+ chars)" minlength="8" autocomplete="new-password" required>
+        <select id="new-role" aria-label="Role">
+          <option value="responder">Responder</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button class="mini" type="submit">Add responder</button>
+      </form>
+    </section>
+    <section id="feed">
+      <h2>Latest markers</h2>
+      <ul id="markers"></ul>
+    </section>
+  </aside>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script>
+    const POLL_MS = 2000;
+    const UPLINK_LIVE_MS = 30000;
+    const COLORS = { hazard: '#ff4d4d', infrastructure: '#4d79ff', responder: '#3ddc84' };
+
+    const map = L.map('map').setView([-41.2865, 174.7762], 13);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const pins = new Map();
+
+    // Markers that arrived in the last few seconds flash on the map and in the list
+    const FLASH_MS = 6000;
+    const freshUntil = new Map();
+    const isFresh = (id) => (freshUntil.get(id) || 0) > Date.now();
+
+    const colorFor = (type) => COLORS[type] || '#cccccc';
+    const ago = (ms) => {
+      const s = Math.max(0, Math.round(ms / 1000));
+      if (s < 60) return `${s}s ago`;
+      if (s < 3600) return `${Math.round(s / 60)}m ago`;
+      return `${Math.round(s / 3600)}h ago`;
+    };
+    const el = (tag, className, text) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+    const label = (m) => `${(m.type || 'marker').toUpperCase()} · ${m.author_name || m.author_id || 'unknown'}`;
+
+    function renderPins(markers) {
+      const seen = new Set();
+      for (const m of markers) {
+        seen.add(m.id);
+        if (pins.has(m.id)) continue;
+        const icon = L.divIcon({
+          className: '',
+          iconSize: [20, 20],
+          html: `<div class="pin" style="background:${colorFor(m.type)}"></div>`
+        });
+        const pin = L.marker([m.latitude, m.longitude], { icon }).addTo(map);
+        pin.bindPopup(() => el('div', '', `${label(m)} · ${new Date(Number(m.timestamp)).toLocaleString()}`));
+        pins.set(m.id, pin);
+        if (isFresh(m.id)) {
+          const dot = pin.getElement()?.querySelector('.pin');
+          dot?.classList.add('flash');
+          setTimeout(() => dot?.classList.remove('flash'), FLASH_MS);
+        }
+      }
+      for (const [id, pin] of pins) {
+        if (!seen.has(id)) { pin.remove(); pins.delete(id); }
+      }
+    }
+
+    // Dead zones: places where a phone had no mesh peer in range
+    const gapLayer = L.layerGroup().addTo(map);
+    function renderGaps(gaps, serverTime) {
+      gapLayer.clearLayers();
+      for (const g of gaps) {
+        L.circleMarker([g.latitude, g.longitude], { radius: 9, color: '#ff9f1a', weight: 2, fillColor: '#ff9f1a', fillOpacity: 0.3 })
+          .bindPopup(() => el('div', '', `DEAD ZONE · ${g.reporter_name || 'unknown'} · ${new Date(Number(g.timestamp)).toLocaleString()}`))
+          .addTo(gapLayer);
+      }
+      document.getElementById('gap-summary').textContent = gaps.length
+        ? `Mesh dead zones: ${gaps.length} logged · latest ${ago(serverTime - Number(gaps[0].timestamp))}`
+        : 'Mesh dead zones: none logged';
+    }
+
+    // Notifications: a phone connecting or dropping off, and new markers
+    const TOAST_MS = 6000;
+    const MAX_MARKER_TOASTS = 3;
+    let knownMarkers = null;
+    let liveUplinks = new Map();
+
+    function toast(text, color, { hazard = false, onClick } = {}) {
+      const node = el('div', hazard ? 'toast hazard' : 'toast');
+      const dot = el('span', 'dot');
+      dot.style.background = color;
+      node.append(dot, el('span', 'grow', text));
+      const dismiss = () => { node.classList.add('leaving'); setTimeout(() => node.remove(), 400); };
+      node.onclick = () => { onClick?.(); dismiss(); };
+      document.getElementById('toasts').append(node);
+      setTimeout(dismiss, TOAST_MS);
+    }
+
+    function notify(data) {
+      const live = new Map(
+        data.uplinks.filter(u => data.serverTime - u.lastSync < UPLINK_LIVE_MS).map(u => [u.id, u.name || u.id])
+      );
+      const current = new Map(data.markers.map(m => [m.id, m]));
+      const removedBy = new Map((data.removals || []).map(r => [r.id, r.removedBy]));
+      const nameOf = (id) => data.uplinks.find(u => u.id === id)?.name || id;
+
+      // The first poll only records what is already there
+      if (knownMarkers !== null) {
+        for (const [id, name] of live) {
+          if (!liveUplinks.has(id)) toast(`${name} connected`, 'var(--ok)');
+        }
+        for (const [id, name] of liveUplinks) {
+          if (!live.has(id)) toast(`${name} disconnected`, 'var(--stale)');
+        }
+
+        const added = data.markers.filter(m => !knownMarkers.has(m.id));
+        for (const m of added) freshUntil.set(m.id, Date.now() + FLASH_MS);
+        for (const m of added.slice(0, MAX_MARKER_TOASTS)) {
+          toast(`New ${label(m)}`, colorFor(m.type), {
+            hazard: m.type === 'hazard',
+            onClick: () => { map.setView([m.latitude, m.longitude], 16); pins.get(m.id)?.openPopup(); }
+          });
+        }
+        if (added.length > MAX_MARKER_TOASTS) {
+          toast(`${added.length - MAX_MARKER_TOASTS} more new markers`, 'var(--muted)');
+        }
+
+        const removed = [...knownMarkers.values()].filter(m => !current.has(m.id));
+        for (const m of removed.slice(0, MAX_MARKER_TOASTS)) {
+          const by = removedBy.get(m.id);
+          toast(`Removed ${label(m)}${by ? ` · by ${nameOf(by)}` : ''}`, 'transparent');
+        }
+        if (removed.length > MAX_MARKER_TOASTS) {
+          toast(`${removed.length - MAX_MARKER_TOASTS} more markers removed`, 'transparent');
+        }
+      }
+
+      knownMarkers = current;
+      liveUplinks = live;
+    }
+
+    // Recent earthquakes from GeoNet, fetched by this browser every 10 minutes
+    const QUAKE_URL = 'https://api.geonet.org.nz/quake?MMI=3';
+    const QUAKE_REFRESH_MS = 10 * 60 * 1000;
+    const quakeLayer = L.layerGroup().addTo(map);
+    async function refreshQuakes() {
+      const summary = document.getElementById('quake-summary');
+      try {
+        const response = await fetch(QUAKE_URL, { headers: { Accept: 'application/vnd.geo+json;version=2' } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const quakes = (await response.json()).features.filter(f => f.properties.quality !== 'deleted');
+        quakeLayer.clearLayers();
+        for (const q of quakes) {
+          const [longitude, latitude] = q.geometry.coordinates;
+          const magnitude = q.properties.magnitude;
+          L.circleMarker([latitude, longitude], {
+            radius: Math.max(4, 3 * magnitude - 2), color: '#b45cff', weight: 1.5, fillColor: '#b45cff', fillOpacity: 0.3
+          })
+            .bindPopup(() => el('div', '', `M${magnitude.toFixed(1)} · ${q.properties.locality} · ${new Date(q.properties.time).toLocaleString()}`))
+            .addTo(quakeLayer);
+        }
+        const latest = quakes[0];
+        summary.textContent = latest
+          ? `Earthquakes (GeoNet): ${quakes.length} recent · latest M${latest.properties.magnitude.toFixed(1)}`
+          : 'Earthquakes (GeoNet): none recent';
+      } catch (error) {
+        summary.textContent = 'Earthquakes (GeoNet): feed unavailable';
+      }
+    }
+    refreshQuakes();
+    setInterval(refreshQuakes, QUAKE_REFRESH_MS);
+
+    function renderSidebar(data) {
+      for (const type of Object.keys(COLORS)) {
+        document.getElementById(`n-${type}`).textContent = data.markers.filter(m => m.type === type).length;
+      }
+
+      const uplinks = document.getElementById('uplinks');
+      uplinks.replaceChildren();
+      if (!data.uplinks.length) uplinks.append(el('li', 'empty', 'No phone has synced since the server started.'));
+      for (const u of [...data.uplinks].sort((a, b) => b.lastSync - a.lastSync)) {
+        const age = data.serverTime - u.lastSync;
+        const li = el('li');
+        const dot = el('span', 'dot');
+        dot.style.background = age < UPLINK_LIVE_MS ? 'var(--ok)' : 'var(--stale)';
+        li.append(dot, el('span', 'grow', `${u.name} (${u.id})`), el('span', 'sub', ago(age)));
+        uplinks.append(li);
+      }
+
+      const list = document.getElementById('markers');
+      list.replaceChildren();
+      if (!data.markers.length) list.append(el('li', 'empty', 'No markers yet.'));
+      for (const m of data.markers.slice(0, 50)) {
+        const li = el('li', isFresh(m.id) ? 'flash' : '');
+        const dot = el('span', 'dot');
+        dot.style.background = colorFor(m.type);
+        li.append(dot, el('span', 'grow', label(m)), el('span', 'sub', ago(data.serverTime - Number(m.timestamp))));
+        li.onclick = () => { map.setView([m.latitude, m.longitude], 16); pins.get(m.id)?.openPopup(); };
+        list.append(li);
+      }
+    }
+
+    // Sign-in: the same responder accounts as the phones. The token lives only
+    // for this browser tab.
+    const TOKEN_KEY = 'mothership_jwt';
+    const readToken = () => { try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; } };
+    let token = readToken();
+    let polling = false;
+
+    const authFetch = (url, options = {}) =>
+      fetch(url, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } });
+
+    // The role is read from the token only to decide what to show; the server
+    // checks it again on every request.
+    const tokenClaims = () => {
+      try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; }
+    };
+
+    async function adminRequest(url, method, body) {
+      const response = await authFetch(url, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      return data;
+    }
+
+    async function loadResponders() {
+      const section = document.getElementById('admin');
+      const claims = tokenClaims();
+      section.hidden = claims.role !== 'admin';
+      if (section.hidden) return;
+      try {
+        const responders = await adminRequest('/api/responders', 'GET');
+        const list = document.getElementById('responders');
+        list.replaceChildren();
+        for (const r of responders) {
+          const li = el('li');
+          const reset = el('button', 'mini', 'Password');
+          reset.type = 'button';
+          reset.onclick = async () => {
+            const password = prompt(`New password for ${r.name} (${r.id}), at least 8 characters:`);
+            if (!password) return;
+            try {
+              await adminRequest(`/api/responders/${encodeURIComponent(r.id)}`, 'PUT', { password });
+              toast(`Password changed for ${r.name}`, 'var(--ok)');
+            } catch (e) { toast(`Could not change password (${e.message})`, 'var(--hazard)'); }
+          };
+          li.append(el('span', 'grow', `${r.name} (${r.id})`), el('span', 'sub', r.role), reset);
+          if (r.id !== claims.id) {
+            const remove = el('button', 'mini danger', 'Remove');
+            remove.type = 'button';
+            remove.onclick = async () => {
+              if (!confirm(`Remove ${r.name} (${r.id})? They will no longer be able to sign in.`)) return;
+              try {
+                await adminRequest(`/api/responders/${encodeURIComponent(r.id)}`, 'DELETE');
+                loadResponders();
+              } catch (e) { toast(`Could not remove (${e.message})`, 'var(--hazard)'); }
+            };
+            li.append(remove);
+          }
+          list.append(li);
+        }
+      } catch (e) {
+        toast(`Could not load responders (${e.message})`, 'var(--hazard)');
+      }
+    }
+
+    document.getElementById('responder-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.target;
+      try {
+        await adminRequest('/api/responders', 'POST', {
+          id: document.getElementById('new-id').value.trim(),
+          name: document.getElementById('new-name').value.trim(),
+          password: document.getElementById('new-password').value,
+          role: document.getElementById('new-role').value
+        });
+        form.reset();
+        loadResponders();
+      } catch (e) {
+        toast(`Could not add responder (${e.message})`, 'var(--hazard)');
+      }
+    });
+
+    function signIn(newToken) {
+      token = newToken;
+      try { sessionStorage.setItem(TOKEN_KEY, newToken); } catch {}
+      loadResponders();
+      // Start from a clean slate so existing markers are not announced as new
+      knownMarkers = null;
+      liveUplinks = new Map();
+      document.body.classList.add('authed');
+      map.invalidateSize();
+      if (!polling) poll();
+    }
+
+    function signOut(message = '') {
+      token = null;
+      try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+      document.body.classList.remove('authed');
+      document.getElementById('login-error').textContent = message;
+      document.getElementById('login-submit').focus();
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = document.getElementById('login-submit');
+      const error = document.getElementById('login-error');
+      error.textContent = '';
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            author_id: document.getElementById('login-id').value.trim(),
+            password: document.getElementById('login-password').value
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Sign-in failed');
+        signIn(data.token);
+      } catch (e) {
+        error.textContent = e instanceof TypeError ? 'Server unreachable' : e.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById('logout').addEventListener('click', () => signOut());
+
+    // Exports need the token, so they are fetched and then saved as files
+    for (const button of document.querySelectorAll('[data-export]')) {
+      button.addEventListener('click', async () => {
+        try {
+          const response = await authFetch(button.dataset.export);
+          if (response.status === 401 || response.status === 403) return signOut('Session expired. Sign in again.');
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(await response.blob());
+          link.download = button.dataset.filename;
+          link.click();
+          URL.revokeObjectURL(link.href);
+        } catch (e) {
+          toast(`Export failed (${e.message})`, 'var(--hazard)');
+        }
+      });
+    }
+
+    async function poll() {
+      if (!token) { polling = false; return; }
+      polling = true;
+      const status = document.getElementById('status');
+      try {
+        const response = await authFetch('/api/dashboard', { cache: 'no-store' });
+        if (response.status === 401 || response.status === 403) {
+          signOut('Session expired. Sign in again.');
+          return;
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        notify(data);
+        renderPins(data.markers);
+        renderGaps(data.gaps || [], data.serverTime);
+        renderSidebar(data);
+        status.className = '';
+        status.textContent = `Live · ${data.markers.length} markers · updated ${new Date().toLocaleTimeString()}`;
+      } catch (error) {
+        status.className = 'error';
+        status.textContent = `Server unreachable (${error.message})`;
+      } finally {
+        setTimeout(poll, POLL_MS);
+      }
+    }
+    if (token) signIn(token);
+    else document.getElementById('login-submit').focus();
+  </script>
+</body>
+</html>

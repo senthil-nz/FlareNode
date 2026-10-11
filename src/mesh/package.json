@@ -1,0 +1,6 @@
+{
+  "name": "flarenode-mesh",
+  "private": true,
+  "type": "module",
+  "description": "Transport-independent mesh sync for FlareNode. Plain JavaScript with no React Native imports, so it runs under Node for tests."
+}

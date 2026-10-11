@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mothership-config
+data:
+  DATABASE_URL: "postgresql://postgres:password@mothership-db:5432/postgres"
+  PORT: "3000"

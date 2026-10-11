@@ -1,0 +1,87 @@
+{
+  "expo": {
+    "name": "FlareNode",
+    "slug": "flarenode",
+    "version": "3.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/app-icon-launcher.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.disaster.response",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app requires location access to coordinate disaster response and map your current position.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app requires location access to track emergency responders in real-time.",
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth for peer-to-peer mesh networking to enable offline coordination.",
+        "NSBluetoothPeripheralUsageDescription": "This app uses Bluetooth for peer-to-peer mesh networking to enable offline coordination.",
+        "NSNearbyInteractionUsageDescription": "This app uses nearby interaction capabilities for mesh network discovery.",
+        "NSLocalNetworkUsageDescription": "This app uses the local network to sync with nearby responders when there is no internet.",
+        "NSBonjourServices": [
+          "_http-alt._tcp."
+        ],
+        "NSFaceIDUsageDescription": "Face ID unlocks FlareNode so only you can see tactical data.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "4"
+    },
+    "android": {
+      "package": "com.disaster.response",
+      "versionCode": 4,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_NETWORK_STATE",
+        "INTERNET",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_ADVERTISE",
+        "NEARBY_WIFI_DEVICES",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "plugins": [
+      "./plugins/kotlin-fix",
+      "./plugins/jni-collision-fix",
+      "./plugins/location-permission-fix",
+      "./plugins/mesh-lab-variant",
+      "@maplibre/maplibre-react-native",
+      "expo-location",
+      "expo-local-authentication",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "kotlinVersion": "1.9.0",
+            "usesCleartextTraffic": true
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      "expo-secure-store",
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e57d2495-9477-442a-9dfb-7a295f49fcac"
+      }
+    },
+    "owner": "senthilnz"
+  }
+}
