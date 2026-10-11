@@ -36,3 +36,6 @@ mothership-server/maps/
 
 # Build output of local native modules
 modules/*/android/build/
+
+# README images
+docs/

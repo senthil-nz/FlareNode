@@ -8,6 +8,19 @@ FlareNode lets responders share what they see on a map (hazards, resources, dead
 
 FlareNode was submitted to the IEEE Impact Challenge 2026; the result was not known at the time of writing. The version demonstrated there was 2.0.0-beta.1, which used the proprietary Ditto SDK for phone-to-phone sync; everything since has replaced that with FlareNode's own open mesh.
 
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/login.jpg" width="200" alt="Sign-in screen"><br>Sign in</td>
+    <td align="center"><img src="docs/screenshots/map.jpg" width="200" alt="Map with markers shared between phones"><br>Shared map, one peer connected</td>
+    <td align="center"><img src="docs/screenshots/hazard-alert.jpg" width="200" alt="Alert shown when another responder reports a hazard"><br>Hazard reported by another responder</td>
+    <td align="center"><img src="docs/screenshots/emergency-mode.jpg" width="200" alt="Emergency Mode: dark map and larger markers"><br>Emergency Mode</td>
+  </tr>
+</table>
+
+Taken on a Galaxy S20 FE in central Wellington with the demo accounts. Markers are red for hazards, blue for infrastructure, green for responders.
+
 ## 🚦 Current Status
 
 **Last Updated:** October 11, 2026
