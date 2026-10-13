@@ -1,5 +1,11 @@
 import { Emitter } from './emitter.js';
 
+// A refusal may stop being one (the phone may since have learned the signer's
+// certificate), so it is remembered for a while, not for good
+const DECLINED_FOR_MS = 10 * 60 * 1000;
+const MAX_DECLINED_PER_PEER = 5000;
+const DECLINED_PER_MESSAGE = 100;
+
 /**
  * Keeps this phone's store in step with every phone it can reach.
  *
@@ -11,6 +17,10 @@ import { Emitter } from './emitter.js';
  *      id and version of every record it holds in them
  *   4. each replies with `docs`: the records the other is missing or holds an
  *      older version of
+ *   5. a phone that refuses any of those records (see policy.js) says which
+ *      with `declined`, and is not sent those exact versions again for a
+ *      while. Without this, a refused record would be sent again at every
+ *      sync for as long as the phones stayed in range.
  *
  * Step 2 is what keeps reconnecting cheap. Phones drop and regain each other
  * often, and most of the time nothing changed in between; matching
@@ -103,6 +113,9 @@ export class SyncEngine extends Emitter {
     this.resyncTimer = null;
     this.peers = new Map();
     this.partial = new Map();
+    // Records each peer has said it refused: peer id -> (record key -> when to forget)
+    this.declined = new Map();
+    this.refusing = null;
     this.nextFragmentId = 1;
     this.unsubscribers = [];
     this.running = false;
@@ -117,6 +130,7 @@ export class SyncEngine extends Emitter {
       this.transport.on('linkChanged', (id, link) => this._onLinkChanged(id, link)),
       this.transport.on('message', (peerId, text) => this._onMessage(peerId, text)),
       this.store.on('change', ({ records, origin }) => this._onStoreChange(records, origin)),
+      this.store.on('rejected', ({ record }) => { if (this.refusing) this.refusing.push(record); }),
     ];
     await this.transport.start({ nodeId: this.nodeId, name: this.name });
     if (this.resyncMs > 0) {
@@ -285,14 +299,45 @@ export class SyncEngine extends Emitter {
       const differing = [...new Set([...Object.keys(mine), ...Object.keys(message.s)])].filter((name) => mine[name] !== message.s[name]);
       if (differing.length > 0) this._send(peerId, { t: 'digest', d: this.store.digest(differing) });
     } else if (message.t === 'digest' && message.d && typeof message.d === 'object') {
-      const missing = this.store.recordsNewerThan(message.d);
+      const missing = this.store.recordsNewerThan(message.d).filter((record) => !this._hasDeclined(peerId, record));
       if (missing.length > 0) this.emit('sent', { to: peer.name, records: missing.length });
       this._sendRecords(peerId, missing);
     } else if (message.t === 'docs' && Array.isArray(message.r)) {
       // Accepted records reach the other peers through the store's change event
+      this.refusing = [];
       const accepted = this.store.applyRemote(message.r, peerId);
+      const refused = this.refusing;
+      this.refusing = null;
       this.emit('received', { from: peer.name, records: message.r.length, accepted: accepted.length });
+      // Tell the sender, so it stops offering these exact versions
+      for (let start = 0; start < refused.length; start += DECLINED_PER_MESSAGE) {
+        const batch = refused.slice(start, start + DECLINED_PER_MESSAGE);
+        this._send(peerId, { t: 'declined', r: batch.map((record) => [record.collection, record.id, record.version]) });
+      }
+    } else if (message.t === 'declined' && Array.isArray(message.r)) {
+      const forgetAt = Date.now() + DECLINED_FOR_MS;
+      if (!this.declined.has(peerId)) this.declined.set(peerId, new Map());
+      const byPeer = this.declined.get(peerId);
+      for (const entry of message.r) {
+        if (!Array.isArray(entry) || entry.length !== 3 || !entry.every((part) => typeof part === 'string')) continue;
+        byPeer.set(entry.join('\u0000'), forgetAt);
+        if (byPeer.size > MAX_DECLINED_PER_PEER) byPeer.delete(byPeer.keys().next().value);
+      }
     }
+  }
+
+  // Only the exact version is skipped. A different version of the same record
+  // is always offered, so a peer cannot be kept from a genuine record by
+  // someone feeding it a bogus one under the same id.
+  _hasDeclined(peerId, record) {
+    const byPeer = this.declined.get(peerId);
+    if (!byPeer) return false;
+    const key = [record.collection, record.id, record.version].join('\u0000');
+    const forgetAt = byPeer.get(key);
+    if (forgetAt === undefined) return false;
+    if (forgetAt > Date.now()) return true;
+    byPeer.delete(key);
+    return false;
   }
 
   /** Sends records in batches small enough to avoid fragmenting where possible. */

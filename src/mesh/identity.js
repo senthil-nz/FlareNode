@@ -42,8 +42,10 @@ export function createAuthority(ed, privateKey) {
   return {
     publicKey: toBase64(ed.getPublicKey(privateKey)),
 
-    issue({ id, name, role, key, now, lifetimeMs }) {
-      const body = certBody({ v: 1, id: String(id), name: String(name), role: String(role), key: String(key), issued: now, expires: now + lifetimeMs });
+    // `since` is when the responder was first certified. A renewal passes the
+    // same `since` again, so the certificate starts when the first one did.
+    issue({ id, name, role, key, now, lifetimeMs, since = now }) {
+      const body = certBody({ v: 1, id: String(id), name: String(name), role: String(role), key: String(key), issued: Math.min(since, now), expires: now + lifetimeMs });
       const signature = ed.sign(toUtf8(CERT_PREFIX + canonicalJson(body)), privateKey);
       return { ...body, sig: toBase64(signature) };
     },

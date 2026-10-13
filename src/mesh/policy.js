@@ -7,8 +7,8 @@ import { verifyCertificate, verifyRecord, certificateId } from './identity.js';
  * A record is only accepted if:
  *
  *   1. it is signed,
- *   2. the signer's certificate was issued by the Mothership and was valid
- *      when the record was written,
+ *   2. the signer's certificate was issued by the Mothership and had not run
+ *      out when the record was written,
  *   3. the signature matches, and
  *   4. the signer is allowed to make that change.
  *
@@ -41,8 +41,17 @@ const CLOCK_ALLOWANCE_MS = 10 * 60 * 1000;
 const allow = { ok: true };
 const deny = (reason) => ({ ok: false, reason });
 
-/** The version every phone gives a certificate's record, so they all agree. */
-export const certificateVersion = (cert) => `${String(cert.issued).padStart(15, '0')}:00000:authority`;
+/**
+ * The version every phone gives a certificate's record, so they all agree.
+ *
+ * It follows the expiry date, not the start date. A renewed certificate keeps
+ * the start date of the one before it and runs for longer, and must replace
+ * it. If renewal moved the start date instead, everything the responder wrote
+ * before the renewal would look as if it was written before they were
+ * certified, and a phone meeting those records for the first time would
+ * refuse them.
+ */
+export const certificateVersion = (cert) => `${String(cert.expires).padStart(15, '0')}:00000:authority`;
 
 /** A certificate as a record in the certificates collection. */
 export const certificateRecord = (cert) => ({
@@ -85,9 +94,13 @@ export function createPolicy({ ed, authorityKey }) {
       if (!stored) return deny('signer is not known');
       const { _id, ...cert } = stored;
 
-      const written = versionMillis(record.version);
-      if (written < cert.issued - CLOCK_ALLOWANCE_MS || written > cert.expires + CLOCK_ALLOWANCE_MS) {
-        return deny('written outside the period the signer was certified for');
+      // Only the end of the certificate's life is enforced. A start date would
+      // add nothing: back-dating a record gains its author nothing, as older
+      // versions lose to newer ones. And it does harm: when a certificate is
+      // reissued with a later start, everything its holder wrote before then
+      // is refused by any phone meeting those records for the first time.
+      if (versionMillis(record.version) > cert.expires + CLOCK_ALLOWANCE_MS) {
+        return deny('written after the certificate of its signer ran out');
       }
       if (!signatureHolds(cert, record)) return deny('signature does not match');
 

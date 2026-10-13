@@ -9,6 +9,7 @@ import { MeshStore } from '../store.js';
 import { MeshService } from '../meshService.js';
 import { createSqlPersistence } from '../sqlPersistence.js';
 import { LoopbackHub } from '../loopbackTransport.js';
+import { SyncEngine } from '../syncEngine.js';
 import { toBase64, fromBase64, canonicalJson } from '../bytes.js';
 import { createAuthority, verifyCertificate, signRecord, verifyRecord, generateKeyPair, certificateId } from '../identity.js';
 import { createPolicy, certificateRecord, CERTIFICATES } from '../policy.js';
@@ -205,7 +206,7 @@ test('rules: a forged certificate is not stored, so nothing signed with it is ac
   assert.equal(b.get(CERTIFICATES, certificateId(forged)), null);
 });
 
-test('rules: a record must be written while its signer was certified', () => {
+test('rules: a record written after the certificate of its signer ran out is refused', () => {
   const start = 1000 * DAY;
   const expired = identityFor('alpha', 'responder', { now: start, lifetimeMs: 30 * DAY });
   const reader = new MeshStore({ nodeId: 'reader', policy: createPolicy({ ed, authorityKey: authority.publicKey }) });
@@ -219,7 +220,9 @@ test('rules: a record must be written while its signer was certified', () => {
 
   assert.equal(reader.applyRemote([written(start + DAY)], 'peer').length, 1); // while valid
   assert.equal(reader.applyRemote([written(start + 60 * DAY)], 'peer').length, 0); // after it ran out
-  assert.equal(reader.applyRemote([written(start - 5 * DAY)], 'peer').length, 0); // before it was issued
+  // Written before the certificate's start date: accepted. Reissuing a certificate
+  // moves its start, and must not turn its holder's earlier records away.
+  assert.equal(reader.applyRemote([written(start - 5 * DAY)], 'peer').length, 1);
 });
 
 test('rules: anyone logs a dead zone as themselves; only an admin clears one', () => {
@@ -401,4 +404,84 @@ test('keys: a generated pair signs and verifies, and the private half is not in 
   assert.equal(fromBase64(identity.privateKey).length, 32);
   assert.equal(identity.certificate.key, toBase64(ed.getPublicKey(fromBase64(identity.privateKey))));
   assert.ok(!JSON.stringify(identity.certificate).includes(identity.privateKey));
+});
+
+/**
+ * Found with three real phones: a phone joining late refused most of what the
+ * others held. Each time a responder's phone came online it was given a fresh
+ * certificate starting "now", which replaced the one before, so everything
+ * they had written earlier looked as if it predated their certificate.
+ */
+test('renewal: a renewed certificate still covers what its holder wrote before the renewal', () => {
+  const start = 2000 * DAY;
+  const keys = generateKeyPair(ed, random);
+  const issue = (now) => authority.issue({ id: 'alpha', name: 'Responder alpha', role: 'responder', key: keys.publicKey, now, lifetimeMs: 90 * DAY, since: start });
+  const first = issue(start);
+  const renewed = issue(start + 30 * DAY);
+
+  assert.equal(renewed.issued, first.issued, 'the renewal starts when the first certificate did');
+  assert.ok(renewed.expires > first.expires, 'and runs for longer');
+  assert.equal(certificateId(renewed), certificateId(first));
+
+  // Written under the first certificate, a day after it was issued
+  const millis = start + DAY;
+  const early = { collection: 'tactical_markers', id: `alpha-${millis}`, version: `${String(millis).padStart(15, '0')}:00000:n`, fields: { _id: `alpha-${millis}`, author_id: 'alpha', type: 'hazard' } };
+  early.auth = signRecord(ed, fromBase64(keys.privateKey), certificateId(first), early);
+
+  // A phone that joins after the renewal is only ever given the renewed certificate
+  const newcomer = new MeshStore({ nodeId: 'newcomer', policy: createPolicy({ ed, authorityKey: authority.publicKey }) });
+  newcomer.applyRemote([certificateRecord(renewed)], 'peer');
+  assert.equal(newcomer.applyRemote([early], 'peer').length, 1);
+
+  // A phone holding the first certificate takes the renewal in its place, not the other way round
+  const veteran = new MeshStore({ nodeId: 'veteran', policy: createPolicy({ ed, authorityKey: authority.publicKey }) });
+  veteran.applyRemote([certificateRecord(first)], 'peer');
+  assert.equal(veteran.applyRemote([certificateRecord(renewed)], 'peer').length, 1);
+  assert.equal(veteran.get(CERTIFICATES, certificateId(first)).expires, renewed.expires);
+  assert.equal(veteran.applyRemote([certificateRecord(first)], 'peer').length, 0);
+});
+
+test('sync: a record a phone refuses is not sent to it again at every sync', async () => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const hub = new LoopbackHub();
+  // The sender applies no rules and holds an unsigned record; the receiver refuses it
+  const sender = new MeshStore({ nodeId: 'sender' });
+  const receiver = new MeshStore({ nodeId: 'receiver', policy: createPolicy({ ed, authorityKey: authority.publicKey }) });
+  const a = new SyncEngine({ store: sender, transport: hub.createTransport(), nodeId: 'sender', name: 'Sender', earlyResyncMs: [], resyncMs: 0 });
+  const b = new SyncEngine({ store: receiver, transport: hub.createTransport(), nodeId: 'receiver', name: 'Receiver', earlyResyncMs: [], resyncMs: 0 });
+  await a.start();
+  await b.start();
+  sender.upsert('tactical_markers', { _id: 'unsigned-1', type: 'hazard' });
+
+  let batchesSent = 0;
+  a.on('sent', () => { batchesSent += 1; });
+  const settle = async () => {
+    await hub.idle();
+    await wait(20);
+    await hub.idle();
+  };
+  const syncAgain = async () => {
+    a._greet('receiver');
+    b._greet('sender');
+    await settle();
+  };
+
+  hub.link('sender', 'receiver'); // connecting starts the first sync
+  await settle();
+  assert.equal(batchesSent, 1, 'offered once');
+  assert.equal(receiver.get('tactical_markers', 'unsigned-1'), null, 'and refused');
+
+  await syncAgain();
+  await syncAgain();
+  assert.equal(batchesSent, 1, 'not offered again');
+
+  // A different version of the same record is still offered
+  sender.upsert('tactical_markers', { _id: 'unsigned-1', type: 'hazard', note: 'changed' });
+  await syncAgain();
+  assert.ok(batchesSent >= 1);
+  const declined = a.declined.get('receiver');
+  assert.equal(declined.size, 2, 'each refused version is remembered separately');
+
+  await a.stop();
+  await b.stop();
 });

@@ -4,7 +4,7 @@
 
 FlareNode lets responders share what they see on a map (hazards, resources, dead zones) directly from phone to phone, with no internet, mobile coverage or server needed in the field. It is open source under the [Apache License 2.0](./LICENSE).
 
-> **Experimental software.** FlareNode is a working prototype tried on two phones. Its security design has not been independently reviewed. Do not rely on it where lives depend on it.
+> **Experimental software.** FlareNode is a working prototype tried on three phones. Its security design has not been independently reviewed. Do not rely on it where lives depend on it.
 
 FlareNode was submitted to the IEEE Impact Challenge 2026; the result was not known at the time of writing. The version demonstrated there was 2.0.0-beta.1, which used the proprietary Ditto SDK for phone-to-phone sync; everything since has replaced that with FlareNode's own open mesh.
 
@@ -27,7 +27,7 @@ The Mothership dashboard, in a browser: every marker the phones have reported, w
 
 ## 🚦 Current Status
 
-**Last Updated:** October 11, 2026
+**Last Updated:** October 13, 2026
 
 **Version:** 3.0.0-rc.2, a release candidate. Phone-to-phone sync runs on FlareNode's own mesh. The Ditto SDK that earlier versions used is gone, along with the Ditto account, token and licence terms it needed. The radio layer of the normal app is Google Nearby Connections.
 
@@ -74,11 +74,16 @@ All checks were on the two test phones.
 - With Wi-Fi off, markers crossed over Bluetooth in both directions. One direction is confirmed from the receiving phone's log; the other from the sending phone's log and the project owner seeing the markers arrive
 - When Wi-Fi was switched off, the mesh moved from the Wi-Fi link to the Bluetooth one without the other phone leaving the peer list
 
+**Three phones together (Mesh Lab build, October 13)**
+- A third, older phone (Galaxy A10, Android 11, 32-bit) joined the other two. Within minutes it showed four faults that two phones never had; three are fixed and one is open. See "First run with three phones" in `DITTO_REPLACEMENT.md`
+- The serious one: a phone joining a group late refused most of the markers the others already held. Fixed, and confirmed on the A10
+- Open: the Bluetooth link between two of the phones dropped and reconnected about every 25 seconds
+
 **Not tried or not settled**
 - Wi-Fi Aware carrying markers by itself: reported working by the project owner. Not confirmed from a phone log; the one log read afterwards (Galaxy S20 FE) showed that phone's Wi-Fi off and no Wi-Fi Aware activity in the time it covered
 - Bluetooth with Google Nearby switched off altogether. Nearby was connected in the background as the fallback during these tests
 - A 15-minute stretch in which the Bluetooth link was down and did not come back by itself (Nearby held the connection, so nothing was lost). The phones may simply have been idle; not yet explained
-- Three or more phones, a phone relaying between two that are out of each other's range, range, long sessions, battery use, and the app in the background
+- A phone relaying between two that are out of each other's range, more than three phones, range, long sessions, battery use, and the app in the background
 
 ### 🔧 Not done yet
 - The first sign-in needs the Mothership, to get the responder's mesh certificate. After that the phone works offline until the certificate runs out (90 days)
@@ -99,7 +104,7 @@ See `ROADMAP.md`, `DITTO_REPLACEMENT.md` and `src/mesh/README.md` for the longer
 
 | Area | 2.0.0-beta.1 | Now |
 |---|---|---|
-| Phone-to-phone sync | Ditto SDK (closed source) | FlareNode's own mesh in `src/mesh`: store, sync, sealing and signing, with 90 automated tests |
+| Phone-to-phone sync | Ditto SDK (closed source) | FlareNode's own mesh in `src/mesh`: store, sync, sealing and signing, with 92 automated tests |
 | Radio layer | Inside Ditto | Google Nearby Connections in the normal app; FlareNode's own Bluetooth, Wi-Fi Aware and local network radios in the Mesh Lab build |
 | Accounts and keys needed | A Ditto account, database ID and token in `.env` | None for sync. `.env` holds only the Mothership address |
 | Who may change what | Checked by the app and the Mothership | Checked by every phone: each record is signed by the responder who wrote it, against a certificate from the Mothership |

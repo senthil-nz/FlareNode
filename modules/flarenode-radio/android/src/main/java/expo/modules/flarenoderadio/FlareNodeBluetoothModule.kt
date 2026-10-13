@@ -61,6 +61,7 @@ class FlareNodeBluetoothModule : Module() {
   private var io: ExecutorService? = null
   private var timer: ScheduledExecutorService? = null
   private var advertising: AdvertiseCallback? = null
+  private var idBytes = ByteArray(0)
   private var scanning: ScanCallback? = null
 
   // Phones heard advertising, by node id
@@ -86,7 +87,7 @@ class FlareNodeBluetoothModule : Module() {
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
         throw CodedException("ERR_BLUETOOTH_TOO_OLD", "Bluetooth data channels need Android 10 or later", null)
       }
-      val idBytes = hexToBytes(id)
+      val nodeIdBytes = hexToBytes(id)
         ?: throw CodedException("ERR_BLUETOOTH_NODE_ID", "The node id must be $NODE_ID_BYTES bytes written as hexadecimal", null)
       val bluetooth = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
         ?: throw CodedException("ERR_BLUETOOTH_NONE", "This phone has no Bluetooth", null)
@@ -98,6 +99,7 @@ class FlareNodeBluetoothModule : Module() {
 
       synchronized(lock) {
         nodeId = id
+        idBytes = nodeIdBytes
         adapter = bluetooth
         val listening = bluetooth.listenUsingInsecureL2capChannel()
         server = listening
@@ -107,23 +109,8 @@ class FlareNodeBluetoothModule : Module() {
         links.start(id, name)
         io?.execute { acceptLoop(listening) }
 
-        // The advertisement says "FlareNode is here"; the reply to a scan adds who and on which channel
         val service = ParcelUuid(SERVICE_UUID)
-        val settings = AdvertiseSettings.Builder()
-          .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
-          .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-          .setConnectable(true)
-          .build()
-        val announcement = AdvertiseData.Builder().addServiceUuid(service).setIncludeDeviceName(false).build()
-        val details = AdvertiseData.Builder()
-          .addServiceData(service, idBytes + byteArrayOf((channel shr 8).toByte(), channel.toByte()))
-          .setIncludeDeviceName(false)
-          .build()
-        val advertiseCallback = object : AdvertiseCallback() {
-          override fun onStartFailure(errorCode: Int) = links.log("could not advertise (error $errorCode)")
-        }
-        advertising = advertiseCallback
-        advertiser.startAdvertising(settings, announcement, details, advertiseCallback)
+        advertise(advertiser, channel)
 
         val scanCallback = object : ScanCallback() {
           override fun onScanResult(callbackType: Int, result: ScanResult) = onSighting(result)
@@ -217,10 +204,58 @@ class FlareNodeBluetoothModule : Module() {
         val socket = listening.accept()
         io?.execute { serve(socket) }
       } catch (error: Exception) {
-        if (links.running) links.log("stopped accepting connections (${error.message})")
+        // Stopping closes the channel on purpose. Anything else is the phone's
+        // Bluetooth dropping it, and without a new one no phone could connect
+        // to this one again.
+        val current = synchronized(lock) { server === listening }
+        if (links.running && current) {
+          links.log("the listening channel failed (${error.message}); opening a new one")
+          synchronized(lock) { timer }?.schedule({ listenAgain(listening) }, RELISTEN_AFTER_MS, TimeUnit.MILLISECONDS)
+        }
         return
       }
     }
+  }
+
+  /** Opens a new listening channel and advertises its number in place of the old one. */
+  private fun listenAgain(failed: BluetoothServerSocket) {
+    try {
+      synchronized(lock) {
+        if (!links.running || server !== failed) return
+        val bluetooth = adapter ?: return
+        val advertiser = bluetooth.bluetoothLeAdvertiser ?: return
+        runCatching { failed.close() }
+        val listening = bluetooth.listenUsingInsecureL2capChannel()
+        server = listening
+        io?.execute { acceptLoop(listening) }
+        advertising?.let { callback -> runCatching { advertiser.stopAdvertising(callback) } }
+        advertise(advertiser, listening.psm)
+        links.log("listening again, on channel ${listening.psm}")
+      }
+    } catch (error: Exception) {
+      links.log("could not open a new listening channel (${error.message}); trying again shortly")
+      synchronized(lock) { timer }?.schedule({ listenAgain(failed) }, RELISTEN_RETRY_MS, TimeUnit.MILLISECONDS)
+    }
+  }
+
+  // The advertisement says "FlareNode is here"; the reply to a scan adds who and on which channel
+  private fun advertise(advertiser: android.bluetooth.le.BluetoothLeAdvertiser, channel: Int) {
+    val service = ParcelUuid(SERVICE_UUID)
+    val settings = AdvertiseSettings.Builder()
+      .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+      .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+      .setConnectable(true)
+      .build()
+    val announcement = AdvertiseData.Builder().addServiceUuid(service).setIncludeDeviceName(false).build()
+    val details = AdvertiseData.Builder()
+      .addServiceData(service, idBytes + byteArrayOf((channel shr 8).toByte(), channel.toByte()))
+      .setIncludeDeviceName(false)
+      .build()
+    val callback = object : AdvertiseCallback() {
+      override fun onStartFailure(errorCode: Int) = links.log("could not advertise (error $errorCode)")
+    }
+    advertising = callback
+    advertiser.startAdvertising(settings, announcement, details, callback)
   }
 
   private fun serve(socket: BluetoothSocket) {
@@ -272,5 +307,7 @@ class FlareNodeBluetoothModule : Module() {
     private const val SWEEP_INTERVAL_MS = 8000L
     private const val RETRY_AFTER_MS = 6000L
     private const val SIGHTING_FRESH_MS = 30000L
+    private const val RELISTEN_AFTER_MS = 2000L
+    private const val RELISTEN_RETRY_MS = 10000L
   }
 }
