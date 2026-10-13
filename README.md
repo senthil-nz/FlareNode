@@ -31,7 +31,7 @@ The Mothership dashboard, in a browser: every marker the phones have reported, w
 
 **Version:** 3.0.0-rc.2, a release candidate. Phone-to-phone sync runs on FlareNode's own mesh. The Ditto SDK that earlier versions used is gone, along with the Ditto account, token and licence terms it needed. The radio layer of the normal app is Google Nearby Connections.
 
-**In progress:** FlareNode's own open-source radios, to replace Google Nearby Connections. Bluetooth, Wi-Fi Aware and the local network are written and have connected and carried markers on two phones. They are switched on only in the separate Mesh Lab build until proven. See [Phone-to-Phone Mesh](#-phone-to-phone-mesh).
+**In progress:** FlareNode's own open-source radios, to replace Google Nearby Connections. Bluetooth, Wi-Fi Aware and the local network are written and have connected and carried markers on the test phones, three of them since October 13. They are switched on only in the separate Mesh Lab build until proven. See [Phone-to-Phone Mesh](#-phone-to-phone-mesh).
 
 **Getting the app:** Android installers for the normal app and for Mesh Lab are on the [Releases page](../../releases), with install notes, or build from source with the [Quick Start](#-quick-start-android-windows) below. The installers are signed with a debug key and have no server address built in: you run your own Mothership and enter its address on the login screen.
 
@@ -39,7 +39,7 @@ This repository starts from the Ditto-free code; earlier versions are not part o
 
 | Platform | State |
 |---|---|
-| Android | Runs on two test phones (Galaxy S20 FE on Android 13, Galaxy S24+ on Android 16) from a standalone release build |
+| Android | Runs on three test phones from a standalone release build: Galaxy S20 FE (Android 13), Galaxy S24+ (Android 16) and Galaxy A10 (Android 11, 32-bit, which needs its own build) |
 | iOS | Compiles on EAS Build as a simulator build, last on October 8 after Ditto was removed. Never run on a device or simulator. **No phone-to-phone sync:** the radio layer is written for Android only and has not been written for iPhone, so on iOS markers would travel only through the Mothership. |
 | Mothership | Runs locally on Windows with SQLite; dashboard in the browser |
 
@@ -62,7 +62,7 @@ This repository starts from the Ditto-free code; earlier versions are not part o
 
 ### 🧪 What has and has not been checked on phones
 
-All checks were on the two test phones.
+The checks below were on the Galaxy S20 FE and Galaxy S24+ unless they say otherwise. A third phone, a Galaxy A10, joined on October 13.
 
 **The normal app (Google Nearby as the radio layer)**
 - Installed on both phones on October 7 and checked by the project owner with two responders. The Galaxy S20 FE log shows the phones connecting and records crossing in both directions with nothing refused and no save or send errors
@@ -90,7 +90,7 @@ All checks were on the two test phones.
 - No way to cancel a responder's certificate early
 - The mesh stops when the app is in the background
 - Phone-to-phone sync on iOS. Every radio layer so far is Android only
-- Proving FlareNode's own radios and removing Google Nearby Connections. They work on two phones, but run only in the Mesh Lab build
+- Proving FlareNode's own radios and removing Google Nearby Connections. They work on three phones, with one Bluetooth fault open, but run only in the Mesh Lab build
 - Reaching responders who are kilometres apart. A long-range LoRa broadcast is on the roadmap as a possible integration; nothing is built and there is no hardware to test with
 - HTTPS for the Mothership
 - An iOS build that installs on an iPhone, and any testing on iOS
@@ -263,7 +263,7 @@ scripts\build-mesh-lab.bat
 | Storage, sealing, per-responder signing, Mothership relay | Done |
 | Ditto removed from the app | Done, in 3.0.0-rc.1 |
 | Several radios at once | Done |
-| Own radios: local network, Bluetooth, Wi-Fi Aware | Written and connecting on two phones; being proven in Mesh Lab |
+| Own radios: local network, Bluetooth, Wi-Fi Aware | Written and connecting on three phones (the oldest has no Wi-Fi Aware); being proven in Mesh Lab |
 | Google Nearby removed | Not started; after the above are proven |
 | Long-range LoRa broadcast | Possible integration; see `ROADMAP.md` |
 
