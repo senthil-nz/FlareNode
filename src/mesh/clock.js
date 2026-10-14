@@ -21,6 +21,12 @@
 const MILLIS_WIDTH = 15;
 const COUNTER_WIDTH = 5;
 
+// A version further ahead of this phone's clock than this is not followed.
+// Without a limit, one phone with a wildly wrong clock (or one bad record)
+// would drag every phone's versions into the future, and from then on a
+// change made with a correct clock would look older than what it replaces.
+const MAX_AHEAD_MS = 60 * 60 * 1000;
+
 const format = (millis, counter, nodeId) =>
   `${String(millis).padStart(MILLIS_WIDTH, '0')}:${counter.toString(36).padStart(COUNTER_WIDTH, '0')}:${nodeId}`;
 
@@ -34,6 +40,12 @@ export const versionMillis = (version) => parse(version).millis;
 
 /** Negative when a is older than b, positive when newer, zero when equal. */
 export const compareVersions = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
+
+/** The smallest version this node can write that is newer than `version`. */
+export const nextAfter = (version, nodeId) => {
+  const { millis, counter } = parse(version);
+  return format(millis, counter + 1, nodeId);
+};
 
 export class HybridClock {
   constructor(nodeId, now = () => Date.now()) {
@@ -59,6 +71,7 @@ export class HybridClock {
   observe(version) {
     const remote = parse(version);
     const wall = this.now();
+    if (!Number.isFinite(remote.millis) || remote.millis > wall + MAX_AHEAD_MS) return;
     const millis = Math.max(wall, this.millis, remote.millis);
     if (millis === this.millis && millis === remote.millis) {
       this.counter = Math.max(this.counter, remote.counter) + 1;

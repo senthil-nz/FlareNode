@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { ed25519 as ed } from '@noble/curves/ed25519';
 
-import { HybridClock } from '../clock.js';
+import { HybridClock, versionMillis } from '../clock.js';
 import { MeshStore } from '../store.js';
 import { MeshService } from '../meshService.js';
 import { createSqlPersistence } from '../sqlPersistence.js';
@@ -484,4 +484,15 @@ test('sync: a record a phone refuses is not sent to it again at every sync', asy
 
   await a.stop();
   await b.stop();
+});
+
+// Found while adding to this change: a certificate's record version follows
+// its expiry, months ahead, and every phone that received one moved its clock
+// that far forward, so everything it wrote afterwards was stamped months ahead.
+test('clock: certificates do not move the clock of a phone', () => {
+  const alpha = identityFor('alpha');
+  const phone = storeAs(alpha, [identityFor('bravo')]); // has taken two certificates, each expiring in 90 days
+  phone.upsert('tactical_markers', { _id: 'alpha-1', type: 'hazard', author_id: 'alpha' });
+  const written = phone.recordsNewerThan({ tactical_markers: {} })[0].version;
+  assert.ok(versionMillis(written) < Date.now() + 60 * 1000, 'stamped with the real time, not months ahead');
 });
