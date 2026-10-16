@@ -7,6 +7,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { query, execute, initDb } = require('./db');
 const { loadAuthority, certificateId, parsePublicKey } = require('./meshAuthority');
+const https = require('https');
+const { loadTls, primaryAddress } = require('./tls');
 
 const app = express();
 app.use(express.json());
@@ -17,6 +19,22 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/vendor/leaflet', express.static(path.join(__dirname, '../node_modules/leaflet/dist')));
 
 const PORT = process.env.PORT || 3000;
+// HTTPS alongside plain HTTP, so phones can move over one at a time.
+// HTTPS_PORT=off turns it off. See src/tls.js.
+const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
+const TLS_DIR = process.env.TLS_DIR || path.join(__dirname, '../tls');
+let tls = null;
+
+// The certificate a phone installs once to trust the Mothership's HTTPS. Not
+// secret: it only lets the phone check the Mothership is who it says it is.
+app.get('/ca.crt', (req, res) => {
+  if (!tls) return res.status(404).json({ error: 'HTTPS is off' });
+  res.type('application/x-x509-ca-cert').attachment('flarenode-mothership-ca.crt').send(tls.ca);
+});
+app.get('/api/tls', async (req, res) => {
+  if (!tls) return res.json({ enabled: false });
+  res.json({ enabled: true, port: Number(HTTPS_PORT), caFingerprint: tls.caFingerprint, addresses: tls.addresses, primary: await primaryAddress() });
+});
 const JWT_SECRET = process.env.JWT_SECRET;
 const VALIDATOR_API_KEY = process.env.VALIDATOR_API_KEY;
 if (!JWT_SECRET || !VALIDATOR_API_KEY) {
@@ -119,6 +137,9 @@ app.post('/api/mesh/enroll', authenticateToken, async (req, res) => {
   try {
     const user = (await query('SELECT id, name, role, created_at FROM responders WHERE id = $1', [req.user.id])).rows[0];
     if (!user) return res.status(401).json({ error: 'Responder no longer exists' });
+    // A cancelled key stays cancelled: the phone must make a new one
+    const cancelledKey = (await query('SELECT cert FROM mesh_cancellations WHERE cert = $1', [certificateId({ id: user.id, key })])).rows[0];
+    if (cancelledKey) return res.status(403).json({ errorCode: 'KEY_CANCELLED', error: 'This phone\'s key was cancelled; it must make a new one' });
     const certificate = authority.issue({ id: user.id, name: user.name, role: user.role || 'responder', key, since: accountCreated(user.created_at) });
     await execute('INSERT INTO mesh_certs (id, cert) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET cert = EXCLUDED.cert', [certificateId(certificate), JSON.stringify(certificate)]);
     res.json({ certificate, authorityKey: authority.publicKey });
@@ -127,6 +148,30 @@ app.post('/api/mesh/enroll', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+/**
+ * Cancels every certificate the Mothership has issued to a responder, from
+ * now on. Phones refuse anything those keys sign afterwards, and the keys are
+ * never certified again: the responder's phone makes a new key when they next
+ * sign in, if they still may. Used when a responder is removed, when their
+ * role changes, and from the dashboard (for a lost or stolen phone).
+ */
+async function cancelResponder(responderId) {
+  const held = await query('SELECT cert FROM mesh_certs');
+  let cancelled = 0;
+  for (const row of held.rows) {
+    let cert;
+    try { cert = JSON.parse(row.cert); } catch (err) { continue; }
+    if (cert.id !== responderId) continue;
+    const id = certificateId(cert);
+    const already = (await query('SELECT cert FROM mesh_cancellations WHERE cert = $1', [id])).rows[0];
+    if (already) continue;
+    const cancellation = authority.cancel({ cert: id, id: responderId });
+    await execute('INSERT INTO mesh_cancellations (cert, responder, record) VALUES ($1, $2, $3)', [id, responderId, JSON.stringify(cancellation)]);
+    cancelled += 1;
+  }
+  return cancelled;
+}
 
 // When a responder's account was created, in milliseconds. SQLite stores it as
 // UTC text with no zone; PostgreSQL returns a Date.
@@ -179,6 +224,9 @@ app.put('/api/responders/:id', authenticateToken, requireAdmin, async (req, res)
       if (!ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
       if (user.id === req.user.id && role !== 'admin') return res.status(400).json({ error: 'You cannot remove your own admin role' });
       await execute('UPDATE responders SET role = $1 WHERE id = $2', [role, user.id]);
+      // Their certificates name the old role. Cancel them, so a former admin
+      // cannot go on acting as one on the mesh until their certificate runs out.
+      if (role !== (user.role || 'responder')) await cancelResponder(user.id);
     }
     if (name !== undefined) {
       if (!String(name).trim()) return res.status(400).json({ error: 'Name is required' });
@@ -203,9 +251,25 @@ app.delete('/api/responders/:id', authenticateToken, requireAdmin, async (req, r
     const result = await execute('DELETE FROM responders WHERE id = $1', [req.params.id]);
     const removed = result.changes ?? result.rowCount;
     if (!removed) return res.status(404).json({ error: 'Responder not found' });
+    await cancelResponder(req.params.id);
     res.json({ message: 'Responder removed' });
   } catch (err) {
     console.error('Responder delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// For a lost or stolen phone: the responder keeps their account, but nothing
+// the phone's key signs from now on is accepted. They sign in again, on that
+// phone or another, and are given a certificate for a new key.
+app.post('/api/responders/:id/cancel-mesh-access', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const user = (await query('SELECT id FROM responders WHERE id = $1', [req.params.id])).rows[0];
+    if (!user) return res.status(404).json({ error: 'Responder not found' });
+    const cancelled = await cancelResponder(user.id);
+    res.json({ cancelled });
+  } catch (err) {
+    console.error('Cancel mesh access error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -293,6 +357,7 @@ app.get('/api/sync/markers', authenticateToken, async (req, res) => {
     const markers = await query('SELECT id, latitude, longitude, type, timestamp, author_id, author_name, mesh FROM tactical_markers');
     const removed = await query('SELECT id, record FROM deleted_markers');
     const certificates = await query('SELECT cert FROM mesh_certs');
+    const cancellations = await query('SELECT record FROM mesh_cancellations');
     res.json({
       markers: markers.rows.map(({ mesh, ...marker }) => marker),
       removed: removed.rows.map((row) => row.id),
@@ -301,6 +366,7 @@ app.get('/api/sync/markers', authenticateToken, async (req, res) => {
       records: parseAll(markers.rows.filter((row) => row.mesh), 'mesh'),
       removedRecords: parseAll(removed.rows.filter((row) => row.record), 'record'),
       certificates: parseAll(certificates.rows, 'cert'),
+      cancellations: parseAll(cancellations.rows, 'record'),
     });
   } catch (err) {
     console.error('Marker fetch error:', err);
@@ -505,6 +571,16 @@ app.get('/api/feed/validator', authenticateValidator, async (req, res) => {
 async function start() {
   await initDb();
   authority = await loadAuthority({ query, execute });
+  if (String(HTTPS_PORT).toLowerCase() !== 'off') {
+    try {
+      tls = loadTls(TLS_DIR);
+      https.createServer({ key: tls.key, cert: tls.cert }, app)
+        .listen(HTTPS_PORT, () => console.log(`HTTPS on port ${HTTPS_PORT} for ${tls.addresses.join(', ')}. Phones install /ca.crt once; its SHA-256 fingerprint is ${tls.caFingerprint}`));
+    } catch (err) {
+      console.error('HTTPS could not start; carrying on with HTTP only:', err.message);
+      tls = null;
+    }
+  }
   app.listen(PORT, () => console.log(`Mothership API secured & running on port ${PORT}`));
 }
 

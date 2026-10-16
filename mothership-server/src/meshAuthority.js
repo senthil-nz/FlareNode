@@ -18,6 +18,7 @@ const { ed25519 } = require('@noble/curves/ed25519');
  */
 
 const CERT_PREFIX = 'flarenode-cert|1|';
+const CANCEL_PREFIX = 'flarenode-cancel|1|';
 const CERT_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
 
 // Must match canonicalJson in src/mesh/bytes.js: sorted keys, no whitespace
@@ -48,6 +49,13 @@ function createAuthority(privateKey) {
     issue({ id, name, role, key, now = Date.now(), since = now }) {
       const body = { v: 1, id: String(id), name: String(name), role: String(role), key: String(key), issued: Math.min(since, now), expires: now + CERT_LIFETIME_MS };
       const signature = ed25519.sign(Buffer.from(CERT_PREFIX + canonicalJson(body), 'utf8'), privateKey);
+      return { ...body, sig: Buffer.from(signature).toString('base64') };
+    },
+
+    // Cancels a certificate from `at` onwards (see cancel in src/mesh/identity.js)
+    cancel({ cert, id, at = Date.now() }) {
+      const body = { v: 1, cert: String(cert), id: String(id), at };
+      const signature = ed25519.sign(Buffer.from(CANCEL_PREFIX + canonicalJson(body), 'utf8'), privateKey);
       return { ...body, sig: Buffer.from(signature).toString('base64') };
     },
   };

@@ -114,7 +114,7 @@ export const CloudSyncService = {
       // The Mothership hands back records exactly as their authors signed
       // them. They are checked like records from any phone, so it is only a
       // carrier: it cannot add, change or remove one unnoticed.
-      const taken = await MeshBackend.applyRelayed(held.certificates, [...(held.records || []), ...(held.removedRecords || [])]);
+      const taken = await MeshBackend.applyRelayed(held.certificates, [...(held.records || []), ...(held.removedRecords || [])], held.cancellations);
       if (taken > 0) console.log(`Pulled from Mothership: ${taken} records.`);
     } finally {
       clearTimeout(timer);

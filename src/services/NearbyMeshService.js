@@ -6,6 +6,7 @@ import { NearbyTransport } from '../mesh/nearbyTransport.js';
 import { LanTransport, AwareTransport, BluetoothTransport } from '../mesh/radioTransports.js';
 import { MultiTransport } from '../mesh/multiTransport.js';
 import { NearbyNative } from '../../modules/flarenode-nearby';
+import { Background } from '../../modules/flarenode-radio';
 import { deriveMeshKey, createCipher } from '../mesh/cipher.js';
 import { phonePersistence } from './meshPersistence';
 import { MeshIdentity } from './MeshIdentity';
@@ -50,7 +51,7 @@ const cipherForToken = async (token) => {
   return createCipher(keys.get(token), (count) => Crypto.getRandomBytes(count));
 };
 
-export default new MeshService({
+const service = new MeshService({
   createTransport,
   createCipher: cipherForToken,
   persistence: phonePersistence(`${FileSystem.documentDirectory}mesh/store.json`),
@@ -60,3 +61,29 @@ export default new MeshService({
   ed: MeshIdentity.ed,
   getNodeId,
 });
+
+// While the mesh is switched on, keep it running when the app is not on
+// screen, so this phone goes on receiving markers and passing them on from a
+// pocket. It costs battery, and shows a notification for as long as it runs.
+const startP2PSync = service.startP2PSync.bind(service);
+const stopP2PSync = service.stopP2PSync.bind(service);
+
+service.startP2PSync = async (...args) => {
+  await startP2PSync(...args);
+  try {
+    await Background.native?.start('FlareNode mesh is on', 'Sharing markers with responders nearby');
+  } catch (error) {
+    console.log('P2P Mesh: could not keep running in the background:', error?.message || error);
+  }
+};
+
+service.stopP2PSync = async (...args) => {
+  try {
+    await Background.native?.stop();
+  } catch (error) {
+    // Nothing to stop
+  }
+  await stopP2PSync(...args);
+};
+
+export default service;

@@ -27,7 +27,7 @@ The Mothership dashboard, in a browser: every marker the phones have reported, w
 
 ## 🚦 Current Status
 
-**Last Updated:** October 13, 2026
+**Last Updated:** October 16, 2026
 
 **Version:** 3.0.0-rc.2, a release candidate. Phone-to-phone sync runs on FlareNode's own mesh. The Ditto SDK that earlier versions used is gone, along with the Ditto account, token and licence terms it needed. The radio layer of the normal app is Google Nearby Connections.
 
@@ -55,9 +55,13 @@ This repository starts from the Ditto-free code; earlier versions are not part o
 - Dead zones logged at the phone's GPS position, drawn on the map and exported
 - Earthquake feed from GeoNet, shared across the mesh
 - App lock (fingerprint, face or device PIN), saved login, offline entry after first sign-in
+- The mesh keeps running when the app is not on screen, with a notification saying so, so a phone in a pocket goes on receiving markers and passing them on
 - Mothership address can be changed on the login screen without a rebuild
 - Mothership backend with JWT auth, marker and dead-zone sync, live dashboard, ODK/GeoJSON export
 - Responder accounts with roles (admin, responder), managed from the dashboard
+- Cancelling a responder's mesh access, for a lost or stolen phone, from the dashboard. Removing a responder or changing their role does it too. Phones refuse anything the cancelled phone signs from then on, and keep what it wrote before
+- HTTPS between the phones and the Mothership, with the Mothership as its own certificate authority (see [HTTPS](#-https-for-the-mothership))
+- Release builds signed with the project's own key when the building computer has it (see [Release signing](#release-signing))
 - Offline map packs: a Wellington city pack ships in the app, and other regions can be downloaded from the Mothership (confirmed by the project owner on a Galaxy S20 FE)
 
 ### 🧪 What has and has not been checked on phones
@@ -79,22 +83,28 @@ The checks below were on the Galaxy S20 FE and Galaxy S24+ unless they say other
 - The serious one: a phone joining a group late refused most of the markers the others already held. Fixed, and confirmed on the A10
 - Open: the Bluetooth link between two of the phones dropped and reconnected about every 25 seconds
 
+**The newest additions (Mesh Lab build, October 16)**
+- The mesh kept running with the screen off: the Galaxy S24+, screen off, opened new links and received a marker dropped on the Galaxy A10 1.2 seconds later. The screen was off for about 40 seconds; longer is still to try
+- The Galaxy S24+ signed in and synced with the Mothership over HTTPS, after its certificate was installed in Android's settings
+- All three phones run builds signed with the project's own key
+- Cancelling a certificate is covered by automated tests; it has not been tried on a phone
+- Found and fixed on the slow A10: the mesh could be started twice a few seconds apart, and both copies ran
+
 **Not tried or not settled**
 - Wi-Fi Aware carrying markers by itself: reported working by the project owner. Not confirmed from a phone log; the one log read afterwards (Galaxy S20 FE) showed that phone's Wi-Fi off and no Wi-Fi Aware activity in the time it covered
 - Bluetooth with Google Nearby switched off altogether. Nearby was connected in the background as the fallback during these tests
 - A 15-minute stretch in which the Bluetooth link was down and did not come back by itself (Nearby held the connection, so nothing was lost). The phones may simply have been idle; not yet explained
-- A phone relaying between two that are out of each other's range, more than three phones, range, long sessions, battery use, and the app in the background
+- A phone relaying between two that are out of each other's range, more than three phones, range, long sessions, battery use, and a phone left screen-off for an hour or more
 
 ### 🔧 Not done yet
 - The first sign-in needs the Mothership, to get the responder's mesh certificate. After that the phone works offline until the certificate runs out (90 days)
-- No way to cancel a responder's certificate early
-- The mesh stops when the app is in the background
 - Phone-to-phone sync on iOS. Every radio layer so far is Android only
+- A cancellation only takes effect on a phone once it reaches it, and a cancelled key could back-date what it signs (see `src/mesh/README.md`)
+- The battery cost of keeping the mesh running in the background is not measured
 - Proving FlareNode's own radios and removing Google Nearby Connections. They work on three phones, with one Bluetooth fault open, but run only in the Mesh Lab build
 - Reaching responders who are kilometres apart. A long-range LoRa broadcast is on the roadmap as a possible integration; nothing is built and there is no hardware to test with
-- HTTPS for the Mothership
 - An iOS build that installs on an iPhone, and any testing on iOS
-- Release signing (builds are signed with the debug key)
+- A published release signed with the project's key (the installers on the Releases page are debug-signed)
 - A verified build from a fresh clone
 - Automated tests for the screens (the mesh core and the Mothership API are tested; see Tests below)
 
@@ -104,10 +114,12 @@ See `ROADMAP.md`, `DITTO_REPLACEMENT.md` and `src/mesh/README.md` for the longer
 
 | Area | 2.0.0-beta.1 | Now |
 |---|---|---|
-| Phone-to-phone sync | Ditto SDK (closed source) | FlareNode's own mesh in `src/mesh`: store, sync, sealing and signing, with 92 automated tests |
+| Phone-to-phone sync | Ditto SDK (closed source) | FlareNode's own mesh in `src/mesh`: store, sync, sealing and signing, with 101 automated tests |
 | Radio layer | Inside Ditto | Google Nearby Connections in the normal app; FlareNode's own Bluetooth, Wi-Fi Aware and local network radios in the Mesh Lab build |
 | Accounts and keys needed | A Ditto account, database ID and token in `.env` | None for sync. `.env` holds only the Mothership address |
-| Who may change what | Checked by the app and the Mothership | Checked by every phone: each record is signed by the responder who wrote it, against a certificate from the Mothership |
+| Who may change what | Checked by the app and the Mothership | Checked by every phone: each record is signed by the responder who wrote it, against a certificate from the Mothership, which can also cancel one |
+| Off screen | Ditto's | Keeps running, with a notification |
+| Phone to Mothership | HTTP | HTTP or HTTPS |
 | Privacy on the air | Ditto's | Messages sealed with a key made from the operational token |
 | Relay between phones that never meet | Ditto's cloud | The Mothership, which passes on signed records it cannot alter unnoticed |
 | Storage on the phone | Ditto's store | SQLite |
@@ -184,19 +196,48 @@ Run these from the project root:
 | `scripts\build-mesh-lab.bat` | Builds the Mesh Lab variant (see [Phone-to-Phone Mesh](#-phone-to-phone-mesh)), installs it next to the normal app on every connected phone and opens it |
 | `scripts\start-mothership.bat` | Starts or restarts the Mothership API and dashboard on port 3000 |
 | `scripts\seed-mothership.bat` | Creates or resets the demo responders (`admin`, `alpha`, `bravo`) |
+| `scripts\create-signing-key.bat` | Creates the project's release signing key, once, outside the repository (see [Release signing](#release-signing)) |
 | `scripts\build-map-pack.bat` | Builds an offline map pack for a region, for the Mothership to serve or to bundle in the app |
 
 They need `.env` and `mothership-server\.env` (see the `.env.example` files), a
 JDK 17 or 21, and the generated `android\` folder.
 
+Pass `32` to `build-app.bat`, `build-and-install.bat` or `build-mesh-lab.bat` to build for an older 32-bit phone such as the Galaxy A10; the install step gives each connected phone the build that fits its processor.
+
+### Release signing
+
+Release builds are signed with FlareNode's own key when this computer has it, and with Android's debug key otherwise, so anyone can build from this repository.
+
+- `scripts\create-signing-key.bat` creates the key once, in `%USERPROFILE%\.flarenode`, with a random password kept in `signing.properties` next to it. Neither is in the repository.
+- **Back up that folder** somewhere safe, such as a password manager. Without the key, a new version cannot be installed over one signed with it.
+- A build signed with the release key cannot be installed over one signed with the debug key, or the other way round. The first time, uninstall FlareNode (and Mesh Lab) on the phone; its local data goes and syncs back from the mesh and the Mothership.
+- The set-up is `plugins/release-signing`, which `npx expo prebuild` applies to the generated Android project.
+
 These scripts are for Android. For iOS see [iOS (EAS Build)](#-ios-eas-build).
+
+## 🔒 HTTPS for the Mothership
+
+The Mothership serves HTTPS on port 3443 as well as plain HTTP on port 3000, so phones can be moved over one at a time. Plain HTTP still works; nothing has to change at once.
+
+A laptop on a local network cannot get a certificate from a public authority, so the Mothership is its own. On first start it creates a small certificate authority and, with it, a certificate for the computer's current network addresses. It issues a new one by itself when the laptop's addresses change. The keys stay in `mothership-server/tls`, which is git-ignored.
+
+**On each phone, once:**
+
+1. Sign in to the dashboard as an admin. Under **Phones over HTTPS** it shows the link to the Mothership's certificate and its fingerprint.
+2. On the phone, download the certificate from that link, then install it: Settings > Security > Encryption and credentials > Install a certificate > CA certificate. Android warns that installing it lets the issuer see encrypted traffic; that issuer is your own Mothership.
+3. Check the fingerprint Android shows matches the dashboard's.
+4. On the FlareNode login screen, set the server address to the `https://...:3443` address the dashboard shows.
+
+**What it protects:** passwords and sign-in tokens on their way to the Mothership, and the Mothership's key that phones are given at sign-in, which they use to check every certificate on the mesh. Over plain HTTP, someone on the same network could read those or substitute their own. The mesh itself was already sealed and signed and does not depend on this.
+
+**What it does not:** the first download of the certificate is over plain HTTP, so check the fingerprint. `HTTPS_PORT=off` turns HTTPS off; `HTTPS_PORT` sets another port. The dashboard on `http://localhost:3000` stays on HTTP, which is safe on the laptop itself.
 
 ## ✅ Tests
 
 | Command | Where | What it covers |
 |---|---|---|
-| `npm run test:mesh` | project root | The mesh in `src/mesh`: sync between phones, relaying, conflicts, removals, sealing, signing and the rules, storage, lost messages, several radios at once, the app-facing service |
-| `npm test` | `mothership-server` | The Mothership API end to end, against a throwaway database: sign-in and roles, responder management, marker and dead-zone sync, removal rules, exports, map packs |
+| `npm run test:mesh` | project root | The mesh in `src/mesh`: sync between phones, relaying, conflicts, removals, sealing, signing and the rules, cancelled certificates, the clock, storage, lost messages, several radios at once, the app-facing service (101 tests) |
+| `npm test` | `mothership-server` | The Mothership API end to end, against a throwaway database: sign-in and roles, responder management, marker and dead-zone sync, removal rules, certificates and cancelling, HTTPS, exports, map packs (21 tests) |
 
 Both run on every push through GitHub Actions (`.github/workflows/tests.yml`). Neither needs a phone or any secret. There are no automated tests for the app's screens.
 
@@ -409,6 +450,7 @@ Mobile Client (React Native, Expo SDK 51)
 │   ├── Radio in the normal app: Google Nearby Connections (Bluetooth, Wi-Fi), Android only
 │   └── Own radios, Mesh Lab build only (modules/flarenode-radio): local network,
 │       Wi-Fi Aware, Bluetooth Low Energy; several can run at once
+├── Background service: keeps the mesh running off screen (modules/flarenode-radio)
 ├── expo-sqlite (mesh records)
 ├── MapLibre
 │   ├── Online: OpenStreetMap raster tiles
@@ -419,7 +461,8 @@ Mobile Client (React Native, Expo SDK 51)
 
 Mothership Backend (Node.js/Express)
 ├── JWT authentication, admin and responder roles
-├── Issues each responder's mesh certificate; relays signed markers between phones
+├── Issues and cancels each responder's mesh certificate; relays signed markers between phones
+├── HTTPS as its own certificate authority, alongside plain HTTP
 ├── SQLite by default, PostgreSQL optional (newest-wins sync, removals remembered)
 ├── Live dashboard with responder management
 ├── Offline map pack downloads
@@ -468,11 +511,11 @@ Contributions are welcome and are accepted under the same licence.
 
 1. Use 3.0.0-rc.2 for a while, then publish 3.0.0
 2. Finish proving FlareNode's own radios in Mesh Lab: Wi-Fi Aware by itself with logs from both phones, Bluetooth with Nearby switched off, reconnecting after a drop, and measured range
-3. Test with three phones, including one relaying between two that cannot reach each other
-4. Move the normal app onto its own radios and remove Google Nearby Connections
-5. Keep the mesh running in the background
-6. Add a way to cancel a responder's certificate
-7. Verify a build from a fresh clone and sign releases properly
+3. Relay test: one phone between two that cannot reach each other
+4. Leave a phone screen-off for an hour or more and check it still receives markers, and measure the battery cost
+5. Try cancelling a responder's access on real phones
+6. Move the normal app onto its own radios and remove Google Nearby Connections
+7. Verify a build from a fresh clone, and publish a release signed with the project's key
 8. Rebuild for iOS and write the iPhone side of the radios
 9. Consider the long-range LoRa broadcast (see `ROADMAP.md`)
 

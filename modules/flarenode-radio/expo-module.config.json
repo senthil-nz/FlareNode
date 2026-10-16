@@ -4,7 +4,8 @@
     "modules": [
       "expo.modules.flarenoderadio.FlareNodeLanModule",
       "expo.modules.flarenoderadio.FlareNodeBluetoothModule",
-      "expo.modules.flarenoderadio.FlareNodeAwareModule"
+      "expo.modules.flarenoderadio.FlareNodeAwareModule",
+      "expo.modules.flarenoderadio.FlareNodeBackgroundModule"
     ]
   }
 }

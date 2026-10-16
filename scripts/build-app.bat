@@ -1,13 +1,21 @@
 @echo off
 rem Builds the standalone FlareNode Android release APK (arm64, JS bundled in).
-rem Usage: scripts\build-app.bat
+rem Usage: scripts\build-app.bat [32]
 setlocal
+rem Most phones are 64-bit. Pass 32 to build for an older 32-bit phone
+rem (the Galaxy A10, for one); the two builds are kept side by side.
+set "ABI=arm64-v8a"
+set "BITS="
+if /i "%~1"=="32" (
+  set "ABI=armeabi-v7a"
+  set "BITS=-32bit"
+)
 set "ROOT=%~dp0.."
 set "BUILT=%ROOT%\android\app\build\intermediates\apk\release\app-release.apk"
 rem Gradle reuses the path above for every variant (the Mesh Lab build too),
 rem so the finished FlareNode APK is copied to a place of its own.
 set "OUTDIR=%ROOT%\android\app\build\outputs\flarenode"
-set "APK=%OUTDIR%\flarenode.apk"
+set "APK=%OUTDIR%\flarenode%BITS%.apk"
 
 if not exist "%ROOT%\.env" (
   echo ERROR: .env not found in the project root. Copy .env.example to .env and fill it in.
@@ -36,11 +44,11 @@ rem Remove it so every build packages the current settings.
 if exist "%ROOT%\node_modules\expo-constants\android\build\generated\assets" rmdir /s /q "%ROOT%\node_modules\expo-constants\android\build\generated\assets"
 
 pushd "%ROOT%\android"
-rem arm64 only keeps the APK small enough for phones that are short on storage.
+rem One processor type per APK keeps it small enough for phones short on storage.
 rem The lint tasks are skipped to keep the build short.
 call "%ROOT%\android\gradlew.bat" app:assembleRelease --console=plain ^
-  -PreactNativeArchitectures=arm64-v8a ^
-  -Pandroid.injected.build.abi=arm64-v8a ^
+  -PreactNativeArchitectures=%ABI% ^
+  -Pandroid.injected.build.abi=%ABI% ^
   -x lint -x lintVitalRelease -x lintVitalAnalyzeRelease -x lintVitalReportRelease
 set "RC=%ERRORLEVEL%"
 popd

@@ -59,6 +59,11 @@ const initDb = async () => {
       id TEXT PRIMARY KEY,
       cert TEXT
     )`,
+    `CREATE TABLE IF NOT EXISTS mesh_cancellations (
+      cert TEXT PRIMARY KEY,
+      responder TEXT,
+      record TEXT
+    )`,
     `CREATE TABLE IF NOT EXISTS connectivity_gaps (
       id TEXT PRIMARY KEY,
       latitude DOUBLE PRECISION,

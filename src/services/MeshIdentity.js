@@ -48,7 +48,7 @@ export const MeshIdentity = {
   ed: ed25519,
 
   /** Asks the Mothership for a certificate for the signed-in responder. */
-  async enrol() {
+  async enrol(retried = false) {
     const token = await SecureStore.getItemAsync('mothership_jwt');
     if (!token) throw new Error('Not signed in');
     const { publicKey } = await keyPair();
@@ -66,6 +66,17 @@ export const MeshIdentity = {
       });
     } finally {
       clearTimeout(timer);
+    }
+    if (response.status === 403) {
+      // This phone's key was cancelled (the phone was reported lost, or the
+      // responder's role changed). Make a new key; signing in again certifies it.
+      const reason = await response.json().catch(() => ({}));
+      if (reason.errorCode === 'KEY_CANCELLED' && !retried) {
+        await SecureStore.deleteItemAsync(PRIVATE_KEY);
+        await SecureStore.deleteItemAsync(PUBLIC_KEY);
+        await SecureStore.deleteItemAsync(CERTIFICATE);
+        return this.enrol(true);
+      }
     }
     if (!response.ok) throw new Error(`Mothership refused enrolment: HTTP ${response.status}`);
     const { certificate, authorityKey } = await response.json();

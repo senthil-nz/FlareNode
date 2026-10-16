@@ -1,5 +1,5 @@
 import { versionMillis } from './clock.js';
-import { verifyCertificate, verifyRecord, certificateId } from './identity.js';
+import { verifyCertificate, verifyCancellation, verifyRecord, certificateId } from './identity.js';
 
 /**
  * The rules for what each responder may write, checked on every phone.
@@ -7,8 +7,8 @@ import { verifyCertificate, verifyRecord, certificateId } from './identity.js';
  * A record is only accepted if:
  *
  *   1. it is signed,
- *   2. the signer's certificate was issued by the Mothership and had not run
- *      out when the record was written,
+ *   2. the signer's certificate was issued by the Mothership, and had neither
+ *      run out nor been cancelled when the record was written,
  *   3. the signature matches, and
  *   4. the signer is allowed to make that change.
  *
@@ -31,9 +31,17 @@ import { verifyCertificate, verifyRecord, certificateId } from './identity.js';
  *
  * Certificates travel in their own collection. A certificate needs no signer:
  * it carries the Mothership's signature and is checked against that.
+ *
+ * So do cancellations. An admin cancels a responder's certificate from the
+ * dashboard (or by removing the responder, or changing their role), and the
+ * Mothership signs a notice that spreads through the mesh like any record.
+ * From the moment it names, nothing signed with that key is accepted. What
+ * was signed before stays valid, so a departing responder's hazard markers
+ * do not vanish with them.
  */
 
 export const CERTIFICATES = 'mesh_certs';
+export const CANCELLATIONS = 'mesh_cancellations';
 
 // Phone clocks differ; allow this much when checking a certificate's dates
 const CLOCK_ALLOWANCE_MS = 10 * 60 * 1000;
@@ -52,6 +60,22 @@ const deny = (reason) => ({ ok: false, reason });
  * refuse them.
  */
 export const certificateVersion = (cert) => `${String(cert.expires).padStart(15, '0')}:00000:authority`;
+
+/**
+ * The version every phone gives a cancellation's record. The earliest
+ * cancellation of a certificate is the strictest, so an earlier one replaces
+ * a later one and not the other way round.
+ */
+export const cancellationVersion = (cancellation) => `${String(MAX_TIME - cancellation.at).padStart(15, '0')}:00000:authority`;
+const MAX_TIME = 999999999999999;
+
+/** A cancellation as a record in the cancellations collection. */
+export const cancellationRecord = (cancellation) => ({
+  collection: CANCELLATIONS,
+  id: cancellation.cert,
+  version: cancellationVersion(cancellation),
+  fields: { ...cancellation, _id: cancellation.cert },
+});
 
 /** A certificate as a record in the certificates collection. */
 export const certificateRecord = (cert) => ({
@@ -77,15 +101,24 @@ export function createPolicy({ ed, authorityKey }) {
   return {
     /**
      * Decides whether `record` may be stored.
-     *   existing        the record currently held under the same id, if any
-     *   getCertificate  looks up a certificate by id among those already accepted
+     *   existing         the record currently held under the same id, if any
+     *   getCertificate   looks up a certificate by id among those already accepted
+     *   getCancellation  looks up a certificate's cancellation, if there is one
      */
-    check(record, existing, getCertificate) {
+    check(record, existing, getCertificate, getCancellation = () => null) {
       if (record.collection === CERTIFICATES) {
         const { _id, ...cert } = record.fields;
         if (record.id !== certificateId(cert)) return deny('certificate filed under the wrong id');
         if (record.version !== certificateVersion(cert)) return deny('certificate with an unexpected version');
         if (!verifyCertificate(ed, authorityKey, cert)) return deny('certificate not issued by the Mothership');
+        return allow;
+      }
+
+      if (record.collection === CANCELLATIONS) {
+        const { _id, ...cancellation } = record.fields;
+        if (record.id !== cancellation.cert) return deny('cancellation filed under the wrong id');
+        if (record.version !== cancellationVersion(cancellation)) return deny('cancellation with an unexpected version');
+        if (!verifyCancellation(ed, authorityKey, cancellation)) return deny('cancellation not issued by the Mothership');
         return allow;
       }
 
@@ -99,8 +132,13 @@ export function createPolicy({ ed, authorityKey }) {
       // versions lose to newer ones. And it does harm: when a certificate is
       // reissued with a later start, everything its holder wrote before then
       // is refused by any phone meeting those records for the first time.
-      if (versionMillis(record.version) > cert.expires + CLOCK_ALLOWANCE_MS) {
+      const written = versionMillis(record.version);
+      if (written > cert.expires + CLOCK_ALLOWANCE_MS) {
         return deny('written after the certificate of its signer ran out');
+      }
+      const cancelled = getCancellation(record.auth.k);
+      if (cancelled && written > cancelled.at) {
+        return deny('written after the certificate of its signer was cancelled');
       }
       if (!signatureHolds(cert, record)) return deny('signature does not match');
 
