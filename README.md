@@ -133,7 +133,7 @@ See `ROADMAP.md`, `DITTO_REPLACEMENT.md` and `src/mesh/README.md` for the longer
 
 ## 📋 Quick Start (Android, Windows)
 
-**You need:** Node.js 18 or newer, a JDK 17 or 21, the Android SDK with `adb`, and a phone with USB debugging enabled. The project uses Expo SDK 51. Phones need Google Play services, which provides the Nearby Connections radio layer the normal app uses.
+**You need:** Node.js 18 or newer, a JDK 17 or 21, the Android SDK with `adb` (the scripts look in Android Studio's usual place, or set `ANDROID_HOME`), and a phone with USB debugging enabled. The project uses Expo SDK 51. Phones need Google Play services, which provides the Nearby Connections radio layer the normal app uses.
 
 1. **Install dependencies**
    ```

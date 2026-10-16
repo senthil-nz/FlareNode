@@ -27,6 +27,13 @@ if not exist "%ROOT%\android\gradlew.bat" (
 )
 
 rem Gradle 8.8 needs JDK 17 or 21 ^(the JDK bundled with recent Android Studio is too new^).
+rem The Android SDK: ANDROID_HOME if set, otherwise where Android Studio installs it
+if not defined ANDROID_HOME if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+if not defined ANDROID_HOME (
+  echo ERROR: the Android SDK was not found. Install it with Android Studio, or set ANDROID_HOME.
+  exit /b 1
+)
+
 if not defined JAVA_HOME (
   for /d %%d in ("%USERPROFILE%\.jdks\jbr-21*" "%USERPROFILE%\.jdks\*21*" "%USERPROFILE%\.jdks\*17*") do (
     if not defined JAVA_HOME if exist "%%d\bin\java.exe" set "JAVA_HOME=%%d"
