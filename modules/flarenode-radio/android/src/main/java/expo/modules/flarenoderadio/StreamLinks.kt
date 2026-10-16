@@ -98,7 +98,8 @@ internal class StreamLinks(
     val link = Link(rawIn, rawOut, closer)
     try {
       link.writer.execute {
-        runCatching { write(link, "$nodeId$NAME_SEPARATOR$displayName".toByteArray(Charsets.UTF_8)) }.onFailure { close(link) }
+        runCatching { write(link, "$nodeId$NAME_SEPARATOR$displayName".toByteArray(Charsets.UTF_8)) }
+          .onFailure { close(link, "could not send the greeting: ${it.message}") }
       }
       val hello = String(readFrame(link) ?: throw IllegalStateException("no greeting"), Charsets.UTF_8)
       val separator = hello.indexOf(NAME_SEPARATOR)
@@ -126,8 +127,9 @@ internal class StreamLinks(
       }
     } catch (error: Exception) {
       // The usual way a connection ends: the other phone left or went out of range
+      close(link, "reading stopped: ${error.message ?: error.javaClass.simpleName}")
     } finally {
-      close(link)
+      close(link, "ended")
     }
   }
 
@@ -149,7 +151,7 @@ internal class StreamLinks(
           promise.resolve(null)
         } catch (error: Exception) {
           promise.reject("ERR_RADIO_SEND", error.message ?: "Send failed", error)
-          close(link)
+          close(link, "a send failed: ${error.message}")
         }
       }
     } catch (error: Exception) {
@@ -181,16 +183,18 @@ internal class StreamLinks(
     val open = synchronized(lock) { links.values.toList() }
     for (link in open) {
       if (now - link.lastHeard > SILENCE_LIMIT_MS) {
-        close(link)
+        close(link, "nothing heard for ${(now - link.lastHeard) / 1000} s")
         continue
       }
       runCatching {
-        link.writer.execute { runCatching { write(link, ByteArray(0)) }.onFailure { close(link) } }
+        link.writer.execute {
+          runCatching { write(link, ByteArray(0)) }.onFailure { close(link, "a keep-alive could not be sent: ${it.message}") }
+        }
       }
     }
   }
 
-  private fun close(link: Link) {
+  private fun close(link: Link, reason: String) {
     if (link.closed) return
     link.shut()
     val peerId = link.peerId ?: return
@@ -201,7 +205,7 @@ internal class StreamLinks(
       } else false
     }
     if (wasCurrent) {
-      log("disconnected from ${link.peerName}")
+      log("disconnected from ${link.peerName} ($reason)")
       emit("onPeerDisconnected", mapOf("id" to peerId))
     }
   }

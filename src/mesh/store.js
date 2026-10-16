@@ -1,6 +1,10 @@
 import { Emitter } from './emitter.js';
-import { HybridClock, compareVersions, versionMillis } from './clock.js';
+import { HybridClock, compareVersions, versionMillis, nextAfter } from './clock.js';
 import { CERTIFICATES } from './policy.js';
+
+// Certificates take their versions from their expiry dates, months ahead, not
+// from when they were written, so they must not move this phone's clock.
+const movesClock = (record) => record.collection !== CERTIFICATES;
 
 /**
  * The on-device document store.
@@ -59,7 +63,7 @@ export class MeshStore extends Emitter {
     const records = (await this.persistence.load()) || [];
     for (const record of records) {
       this._put(record);
-      this.clock.observe(record.version);
+      if (movesClock(record)) this.clock.observe(record.version);
     }
   }
 
@@ -71,10 +75,14 @@ export class MeshStore extends Emitter {
     if (!doc || doc._id === undefined || doc._id === null) throw new Error('Document needs an _id');
     const id = String(doc._id);
     const existing = this._collection(collection).get(id);
+    // A change must be newer than what it replaces, even if that carries a
+    // version from a clock that was ahead
+    let version = this.clock.tick();
+    if (existing && compareVersions(version, existing.version) <= 0) version = nextAfter(existing.version, this.clock.nodeId);
     const record = {
       collection,
       id,
-      version: this.clock.tick(),
+      version,
       fields: { ...(existing?.fields || {}), ...doc, _id: id },
     };
     if (this.signer) record.auth = this.signer(record);
@@ -199,7 +207,7 @@ export class MeshStore extends Emitter {
       // Older than the retention period and unknown here: it may be a record
       // whose tombstone has already been cleaned up, so it is not taken.
       if (!existing && horizon !== null && versionMillis(record.version) < horizon) continue;
-      this.clock.observe(record.version);
+      if (movesClock(record)) this.clock.observe(record.version);
       if (existing && compareVersions(record.version, existing.version) <= 0) continue;
       const verdict = this._verdict(record, existing);
       if (!verdict.ok) {

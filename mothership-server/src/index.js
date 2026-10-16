@@ -117,9 +117,9 @@ app.post('/api/mesh/enroll', authenticateToken, async (req, res) => {
   const key = req.body?.key;
   if (!parsePublicKey(key)) return res.status(400).json({ error: 'key must be a base64 Ed25519 public key' });
   try {
-    const user = (await query('SELECT id, name, role FROM responders WHERE id = $1', [req.user.id])).rows[0];
+    const user = (await query('SELECT id, name, role, created_at FROM responders WHERE id = $1', [req.user.id])).rows[0];
     if (!user) return res.status(401).json({ error: 'Responder no longer exists' });
-    const certificate = authority.issue({ id: user.id, name: user.name, role: user.role || 'responder', key });
+    const certificate = authority.issue({ id: user.id, name: user.name, role: user.role || 'responder', key, since: accountCreated(user.created_at) });
     await execute('INSERT INTO mesh_certs (id, cert) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET cert = EXCLUDED.cert', [certificateId(certificate), JSON.stringify(certificate)]);
     res.json({ certificate, authorityKey: authority.publicKey });
   } catch (err) {
@@ -127,6 +127,15 @@ app.post('/api/mesh/enroll', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// When a responder's account was created, in milliseconds. SQLite stores it as
+// UTC text with no zone; PostgreSQL returns a Date.
+function accountCreated(value) {
+  if (value instanceof Date) return value.getTime();
+  const text = String(value || '');
+  const parsed = Date.parse(/Z|[+-]\d\d:?\d\d$/.test(text) ? text : `${text.replace(' ', 'T')}Z`);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
 
 // Responder management (admins only)
 app.get('/api/responders', authenticateToken, requireAdmin, async (req, res) => {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { HybridClock, compareVersions } from '../clock.js';
+import { HybridClock, compareVersions, versionMillis } from '../clock.js';
 import { MeshStore } from '../store.js';
 import { SyncEngine, PROTOCOL_VERSION } from '../syncEngine.js';
 import { LoopbackHub } from '../loopbackTransport.js';
@@ -40,11 +40,31 @@ test('clock: versions always increase, even within one millisecond', () => {
 });
 
 test('clock: a phone whose clock is behind still writes newer than what it has seen', () => {
-  const ahead = new HybridClock('ahead', () => 5_000_000);
+  const ahead = new HybridClock('ahead', () => 1_000 + 30 * 60 * 1000); // half an hour ahead
   const behind = new HybridClock('behind', () => 1_000);
   const seen = ahead.tick();
   behind.observe(seen);
   assert.ok(compareVersions(behind.tick(), seen) > 0);
+});
+
+test('clock: a version far in the future does not drag this phone along with it', () => {
+  const clock = new HybridClock('here', () => 1_000_000);
+  clock.observe(`${String(1_000_000 + 90 * 24 * 60 * 60 * 1000).padStart(15, '0')}:00000:far`);
+  assert.equal(versionMillis(clock.tick()), 1_000_000);
+});
+
+test('store: a change to a record is newer than it, even when the record came from a clock far ahead', () => {
+  const store = new MeshStore({ nodeId: 'here', clock: new HybridClock('here', () => 1_000_000) });
+  const future = { collection: 'tactical_markers', id: 'm1', version: `${String(9_000_000_000).padStart(15, '0')}:00000:far`, fields: { _id: 'm1', type: 'hazard' } };
+  store.applyRemote([future], 'peer');
+  store.upsert('tactical_markers', { _id: 'm1', deleted: true });
+  assert.equal(store.get('tactical_markers', 'm1').deleted, true);
+
+  // ...and another phone holding the future copy takes the change
+  const other = new MeshStore({ nodeId: 'other' });
+  other.applyRemote([future], 'peer');
+  other.applyRemote(store.recordsNewerThan(other.digest(['tactical_markers'])), 'peer');
+  assert.equal(other.get('tactical_markers', 'm1').deleted, true);
 });
 
 test('store: upsert merges fields, so flagging a marker deleted keeps the rest', () => {

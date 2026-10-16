@@ -41,8 +41,12 @@ function createAuthority(privateKey) {
   const publicKey = Buffer.from(ed25519.getPublicKey(privateKey)).toString('base64');
   return {
     publicKey,
-    issue({ id, name, role, key, now = Date.now() }) {
-      const body = { v: 1, id: String(id), name: String(name), role: String(role), key: String(key), issued: now, expires: now + CERT_LIFETIME_MS };
+    // `since` is when the responder's account was created. Every certificate
+    // for them starts then, however often it is renewed: if a renewal moved the
+    // start, what they wrote before it would be refused by phones that had
+    // not met those records yet.
+    issue({ id, name, role, key, now = Date.now(), since = now }) {
+      const body = { v: 1, id: String(id), name: String(name), role: String(role), key: String(key), issued: Math.min(since, now), expires: now + CERT_LIFETIME_MS };
       const signature = ed25519.sign(Buffer.from(CERT_PREFIX + canonicalJson(body), 'utf8'), privateKey);
       return { ...body, sig: Buffer.from(signature).toString('base64') };
     },

@@ -81,6 +81,22 @@ What it does not show:
 - **Bluetooth with Nearby switched off altogether**, which would remove the caveat above.
 - Reconnecting after going out of range, range itself, more than two phones, long sessions, and battery use.
 
+### First run with three phones (2026-10-13)
+
+A Galaxy A10 (Android 11, 32-bit, 1.8 GB of memory, no Wi-Fi Aware, no fingerprint sensor) joined the Galaxy S20 FE and S24+, signed in as the admin. It needs its own 32-bit build. All three in one place, in the Mesh Lab build.
+
+Faults found within minutes, none of which two phones had shown:
+
+| Fault | Cause | Fix |
+|---|---|---|
+| The new phone showed only markers added after it joined. It refused the rest: 2,112 refusals in a few minutes. | Each time a phone came online it was issued a certificate starting "now" that replaced the one before. Everything its responder had written earlier then looked as if it predated their certificate. Phones that already held those markers never noticed. | Only the end of a certificate's life is enforced. A start date protected nothing and broke whenever it moved. A first attempt, starting certificates at the account's creation date, failed because reseeding the demo accounts had reset that date. |
+| The same refused records were sent again about every 20 seconds, for as long as the phones were in range. | Nothing told the sender they had been refused. | A phone says which records it declined and is not sent those exact versions again for ten minutes. |
+| The A10 stopped accepting Bluetooth connections. | Its Bluetooth dropped the listening channel and nothing reopened it. | The channel is reopened and its new number advertised. |
+| The Bluetooth link between the S20 FE and the A10 dropped and reconnected about every 25 seconds. | Not known. | None yet. Disconnections are now logged with their reason. |
+
+After the fixes, on the A10 and S24+ (the S20 FE had not yet been updated to the final build): the A10 loaded what it had, took 11 records from the Mothership, connected to both other phones, and refused nothing; the project owner confirmed the markers appeared. Still to do: the 25-second Bluetooth drop, and the relay test with the end phones out of each other's range.
+
+
 Rules adopted from the start so the transport can be swapped later:
 
 - **Own the identity.** Each phone has its own mesh node id and name; a transport's temporary connection handles are never used above the transport.
