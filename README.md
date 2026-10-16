@@ -29,11 +29,11 @@ The Mothership dashboard, in a browser: every marker the phones have reported, w
 
 **Last Updated:** October 16, 2026
 
-**Version:** 3.0.0-rc.2, a release candidate. Phone-to-phone sync runs on FlareNode's own mesh. The Ditto SDK that earlier versions used is gone, along with the Ditto account, token and licence terms it needed. The radio layer of the normal app is Google Nearby Connections.
+**Version:** 3.0.0-rc.3, a release candidate. Phone-to-phone sync runs on FlareNode's own mesh. The Ditto SDK that earlier versions used is gone, along with the Ditto account, token and licence terms it needed. The radio layer of the normal app is Google Nearby Connections.
 
 **In progress:** FlareNode's own open-source radios, to replace Google Nearby Connections. Bluetooth, Wi-Fi Aware and the local network are written and have connected and carried markers on the test phones, three of them since October 13. They are switched on only in the separate Mesh Lab build until proven. See [Phone-to-Phone Mesh](#-phone-to-phone-mesh).
 
-**Getting the app:** Android installers for the normal app and for Mesh Lab are on the [Releases page](../../releases), with install notes, or build from source with the [Quick Start](#-quick-start-android-windows) below. The installers are signed with a debug key and have no server address built in: you run your own Mothership and enter its address on the login screen.
+**Getting the app:** Android installers for the normal app and for Mesh Lab are on the [Releases page](../../releases), with install notes, or build from source with the [Quick Start](#-quick-start-android-windows) below. From 3.0.0-rc.3 they are signed with the project's own key, and come in 64-bit and 32-bit (for older phones such as the Galaxy A10). They have no server address built in: you run your own Mothership and enter its address on the login screen. A phone with an earlier, debug-signed FlareNode must uninstall it first.
 
 This repository starts from the Ditto-free code; earlier versions are not part of its history.
 
@@ -104,8 +104,6 @@ The checks below were on the Galaxy S20 FE and Galaxy S24+ unless they say other
 - Proving FlareNode's own radios and removing Google Nearby Connections. They work on three phones, with one Bluetooth fault open, but run only in the Mesh Lab build
 - Reaching responders who are kilometres apart. A long-range LoRa broadcast is on the roadmap as a possible integration; nothing is built and there is no hardware to test with
 - An iOS build that installs on an iPhone, and any testing on iOS
-- A published release signed with the project's key (the installers on the Releases page are debug-signed)
-- A verified build from a fresh clone
 - Automated tests for the screens (the mesh core and the Mothership API are tested; see Tests below)
 
 See `ROADMAP.md`, `DITTO_REPLACEMENT.md` and `src/mesh/README.md` for the longer-term items and the mesh's known limits.
@@ -133,7 +131,7 @@ See `ROADMAP.md`, `DITTO_REPLACEMENT.md` and `src/mesh/README.md` for the longer
 
 ## 📋 Quick Start (Android, Windows)
 
-**You need:** Node.js 18 or newer, a JDK 17 or 21, the Android SDK with `adb`, and a phone with USB debugging enabled. The project uses Expo SDK 51. Phones need Google Play services, which provides the Nearby Connections radio layer the normal app uses.
+**You need:** Node.js 18 or newer, a JDK 17 or 21, the Android SDK with `adb` (the scripts look in Android Studio's usual place, or set `ANDROID_HOME`), and a phone with USB debugging enabled. The project uses Expo SDK 51. Phones need Google Play services, which provides the Nearby Connections radio layer the normal app uses.
 
 1. **Install dependencies**
    ```
@@ -153,8 +151,10 @@ See `ROADMAP.md`, `DITTO_REPLACEMENT.md` and `src/mesh/README.md` for the longer
    ```
    npx expo prebuild -p android
    ```
-   The `android/` folder is git-ignored. Generating it from a fresh clone has
-   not been verified end to end.
+   The `android/` folder is git-ignored and generated from `app.json` and the
+   project's plugins. Checked from a fresh clone on 16 October 2026 (Windows 11,
+   Node 22, JDK 21): these steps and `scriptsuild-app.bat` built the
+   release installers, and both test suites pass on the clone.
 
 4. **Start the Mothership and create the demo accounts**
    ```
@@ -509,15 +509,14 @@ Contributions are welcome and are accepted under the same licence.
 
 ## 🚀 Next Steps
 
-1. Use 3.0.0-rc.2 for a while, then publish 3.0.0
+1. Use 3.0.0-rc.3 for a while, then publish 3.0.0
 2. Finish proving FlareNode's own radios in Mesh Lab: Wi-Fi Aware by itself with logs from both phones, Bluetooth with Nearby switched off, reconnecting after a drop, and measured range
 3. Relay test: one phone between two that cannot reach each other
 4. Leave a phone screen-off for an hour or more and check it still receives markers, and measure the battery cost
 5. Try cancelling a responder's access on real phones
 6. Move the normal app onto its own radios and remove Google Nearby Connections
-7. Verify a build from a fresh clone, and publish a release signed with the project's key
-8. Rebuild for iOS and write the iPhone side of the radios
-9. Consider the long-range LoRa broadcast (see `ROADMAP.md`)
+7. Rebuild for iOS and write the iPhone side of the radios
+8. Consider the long-range LoRa broadcast (see `ROADMAP.md`)
 
 ## 📞 Questions and Problems
 

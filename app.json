@@ -33,11 +33,11 @@
         },
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "4"
+      "buildNumber": "5"
     },
     "android": {
       "package": "com.disaster.response",
-      "versionCode": 4,
+      "versionCode": 5,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -69,7 +69,8 @@
             "compileSdkVersion": 34,
             "targetSdkVersion": 34,
             "kotlinVersion": "1.9.0",
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": true,
+            "useLegacyPackaging": true
           },
           "ios": {
             "deploymentTarget": "16.4"
