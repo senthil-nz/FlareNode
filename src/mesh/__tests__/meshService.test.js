@@ -210,3 +210,23 @@ test('markers survive closing and reopening the app', async () => {
   const reopened = await phone(hub, 'node-a', alpha, { persistence });
   assert.deepEqual((await reopened.getTacticalMarkers()).map((doc) => doc._id), ['alpha-kept']);
 });
+
+// Found on a slow phone: the mesh was asked to start twice within a few
+// seconds, two copies ran, and every message was handled twice.
+test('starting the mesh twice at once runs it once', async () => {
+  const hub = new LoopbackHub();
+  let transports = 0;
+  const service = new MeshService({
+    createTransport: () => { transports += 1; return hub.createTransport(); },
+    getNodeId: async () => 'slow',
+  });
+  await service.init('Slow phone');
+  await Promise.all([service.startP2PSync('OP-TEST'), service.startP2PSync('OP-TEST'), service.startP2PSync()]);
+  assert.equal(transports, 1);
+
+  // Stop and start asked for together still end in the order asked
+  await Promise.all([service.stopP2PSync(), service.startP2PSync('OP-TEST')]);
+  assert.equal(transports, 2);
+  assert.ok(service.engine, 'running, because start was asked for last');
+  await service.stopP2PSync();
+});

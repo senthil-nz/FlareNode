@@ -27,9 +27,13 @@ import { toBase64, fromBase64, toUtf8, canonicalJson } from './bytes.js';
 
 const CERT_PREFIX = 'flarenode-cert|1|';
 const RECORD_PREFIX = 'flarenode-record|1|';
+const CANCEL_PREFIX = 'flarenode-cancel|1|';
 
 // The certificate's content, without its signature
 const certBody = ({ v, id, name, role, key, issued, expires }) => ({ v, id, name, role, key, issued, expires });
+
+// A cancellation's content, without its signature
+const cancelBody = ({ v, cert, id, at }) => ({ v, cert, id, at });
 
 /** The id a certificate is stored and referred to under: responder plus key. */
 export const certificateId = (cert) => `${cert.id}:${String(cert.key).slice(0, 16)}`;
@@ -49,7 +53,34 @@ export function createAuthority(ed, privateKey) {
       const signature = ed.sign(toUtf8(CERT_PREFIX + canonicalJson(body)), privateKey);
       return { ...body, sig: toBase64(signature) };
     },
+
+    /**
+     * Cancels a certificate from `at` onwards: nothing its key signs after
+     * that is accepted. What it signed before stays valid. `cert` is the
+     * certificate's id (see certificateId).
+     */
+    cancel({ cert, id, at }) {
+      const body = cancelBody({ v: 1, cert: String(cert), id: String(id), at });
+      const signature = ed.sign(toUtf8(CANCEL_PREFIX + canonicalJson(body)), privateKey);
+      return { ...body, sig: toBase64(signature) };
+    },
   };
+}
+
+/** True if the cancellation is well formed and was issued by this authority. */
+export function verifyCancellation(ed, authorityKey, cancellation) {
+  if (!cancellation || cancellation.v !== 1) return false;
+  for (const field of ['cert', 'id', 'sig']) if (typeof cancellation[field] !== 'string' || !cancellation[field]) return false;
+  if (!Number.isFinite(cancellation.at)) return false;
+  if (!cancellation.cert.startsWith(`${cancellation.id}:`)) return false;
+  const authority = fromBase64(authorityKey);
+  const signature = fromBase64(cancellation.sig);
+  if (!authority || !signature) return false;
+  try {
+    return ed.verify(signature, toUtf8(CANCEL_PREFIX + canonicalJson(cancelBody(cancellation))), authority);
+  } catch (error) {
+    return false;
+  }
 }
 
 /** True if the certificate is well formed and was issued by this authority. */

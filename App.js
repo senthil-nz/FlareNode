@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppRegistry, AppState, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import AppLock from './src/components/AppLock';
@@ -9,6 +9,13 @@ import SaliencyToast from './src/components/SaliencyToast';
 import { useSaliencyAlerts } from './src/hooks/useSaliencyAlerts';
 import MeshLabScreen from './src/screens/MeshLabScreen';
 import { IS_MESH_LAB_BUILD } from './src/services/MeshBackend';
+
+// Started by the service that keeps the mesh running off screen (see
+// MeshForegroundService). React Native stops its timers when the app leaves
+// the screen unless a background task is in progress, and the mesh needs them
+// to keep comparing notes with its peers. So this task never finishes; it ends
+// when the service is stopped.
+AppRegistry.registerHeadlessTask('FlareNodeMesh', () => () => new Promise(() => {}));
 
 // Away from the app for longer than this (phone locked, another app in front)
 // and the fingerprint is asked for again

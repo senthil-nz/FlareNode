@@ -26,6 +26,12 @@ export const PermissionService = {
         }
 
         const granted = await PermissionsAndroid.requestMultiple(bluetoothPermissions);
+
+        // The notification shown while the mesh runs off screen. The mesh works
+        // without it, so a refusal is not treated as a failure.
+        if (Platform.Version >= 33) {
+          await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => {});
+        }
         const btGranted = Object.values(granted).every(
           res => res === PermissionsAndroid.RESULTS.GRANTED
         );

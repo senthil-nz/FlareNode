@@ -21,3 +21,8 @@ android {
   }
 }
 
+
+dependencies {
+  // For the service that keeps the mesh running off screen (MeshForegroundService)
+  compileOnly "com.facebook.react:react-android"
+}

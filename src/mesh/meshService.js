@@ -2,7 +2,7 @@ import { Emitter } from './emitter.js';
 import { MeshStore } from './store.js';
 import { HybridClock } from './clock.js';
 import { SyncEngine } from './syncEngine.js';
-import { createPolicy, certificateRecord, CERTIFICATES } from './policy.js';
+import { createPolicy, certificateRecord, cancellationRecord, CERTIFICATES, CANCELLATIONS } from './policy.js';
 import { signRecord, certificateId } from './identity.js';
 import { fromBase64 } from './bytes.js';
 
@@ -61,6 +61,7 @@ export class MeshService {
     this.getIdentity = getIdentity;
     this.ed = ed;
     this.identity = null;
+    this.lifecycle = Promise.resolve();
     this.opToken = null;
     this.persistence = persistence;
     this.getNodeId = getNodeId;
@@ -112,6 +113,15 @@ export class MeshService {
           console.log(`Mesh store: ${this.store.size()} records loaded`);
           this.store.on('persistenceError', (error) => console.warn('Mesh store: could not save:', error?.message || error));
           this.store.on('rejected', ({ record, reason }) => console.log(`P2P Mesh: refused ${record.collection}/${record.id}: ${reason}`));
+          // If this phone's own key is cancelled, ask for a new one straight
+          // away: anything signed with the old key will now be refused
+          this.store.on('change', ({ records }) => {
+            const ownCancelled = records.some((record) => record.collection === CANCELLATIONS && record.id === this.certificateId);
+            if (ownCancelled) {
+              console.log('Mesh identity: the key of this phone was cancelled; asking for a new one');
+              this._loadIdentity();
+            }
+          });
           await this._loadIdentity();
           // Tidy removed records left over from earlier sessions
           const { shrunk, dropped } = this.store.compact();
@@ -158,12 +168,13 @@ export class MeshService {
     }
     const privateKey = fromBase64(identity.privateKey);
     const certId = certificateId(identity.certificate);
+    this.certificateId = certId;
     this.store.policy = createPolicy({ ed: this.ed, authorityKey: identity.authorityKey });
     this.store.signer = (record) => signRecord(this.ed, privateKey, certId, record);
     // Records from before signing was introduced carry no signature. No phone
     // can check them, so none would accept them, and they would be offered
     // and refused on every sync for ever. They are dropped here.
-    const unsigned = this.store.removeWhere((record) => record.collection !== CERTIFICATES && !record.auth);
+    const unsigned = this.store.removeWhere((record) => record.collection !== CERTIFICATES && record.collection !== CANCELLATIONS && !record.auth);
     if (unsigned > 0) console.log(`Mesh store: dropped ${unsigned} unsigned records from an earlier version`);
     // Publish the certificate so other phones can check this responder's records
     this.store.applyRemote([certificateRecord(identity.certificate)], 'local');
@@ -180,11 +191,31 @@ export class MeshService {
    * is part of: only phones started with the same token can read each
    * other's messages or have theirs accepted.
    */
+  /**
+   * Starting and stopping happen one at a time, in the order asked for.
+   * Starting takes a few seconds on a slow phone, and the mesh only counts as
+   * running once it has started; without this, a second request in that time
+   * started a second copy, and both ran, handling every message twice.
+   */
+  _serially(step) {
+    const run = this.lifecycle.then(step, step);
+    this.lifecycle = run.catch(() => {});
+    return run;
+  }
+
   async startP2PSync(token) {
+    return this._serially(() => this._start(token));
+  }
+
+  async stopP2PSync() {
+    return this._serially(() => this._stop());
+  }
+
+  async _start(token) {
     if (!this.initialized) throw new Error('Mesh not initialized');
     if (token) {
       // A different token means a different mesh, so restart on it
-      if (this.engine && token !== this.opToken) await this.stopP2PSync();
+      if (this.engine && token !== this.opToken) await this._stop();
       this.opToken = token;
     }
     if (this.engine) return;
@@ -217,7 +248,7 @@ export class MeshService {
     console.log('P2P Mesh Networking active');
   }
 
-  async stopP2PSync() {
+  async _stop() {
     if (!this.engine) return;
     const engine = this.engine;
     this.engine = null;
@@ -235,10 +266,11 @@ export class MeshService {
   async setDeviceName(deviceName) {
     if (!deviceName || String(deviceName) === this.deviceName) return;
     this.deviceName = String(deviceName);
-    if (this.engine) {
-      await this.stopP2PSync();
-      await this.startP2PSync();
-    }
+    await this._serially(async () => {
+      if (!this.engine) return;
+      await this._stop();
+      await this._start();
+    });
   }
 
   /** Phones directly connected right now. */
@@ -381,10 +413,11 @@ export class MeshService {
    * checks as records from a phone: the Mothership is a carrier here, and is
    * not trusted to have written or altered anything.
    */
-  async applyRelayed(certificates, records) {
+  async applyRelayed(certificates, records, cancellations = []) {
     if (!this.initialized) return 0;
-    const all = [...(certificates || []).map(certificateRecord), ...(records || [])];
-    return this.store.applyRemote(all, 'mothership').filter((record) => record.collection !== CERTIFICATES).length;
+    const all = [...(certificates || []).map(certificateRecord), ...(cancellations || []).map(cancellationRecord), ...(records || [])];
+    return this.store.applyRemote(all, 'mothership')
+      .filter((record) => record.collection !== CERTIFICATES && record.collection !== CANCELLATIONS).length;
   }
 
   async shutdown() {

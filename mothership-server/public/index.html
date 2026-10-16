@@ -44,6 +44,16 @@
     .mini { padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 11px; cursor: pointer; }
     .mini:hover { border-color: var(--muted); }
     .mini.danger { color: var(--hazard); }
+    /* Each responder: name and role on one line, their buttons on the next */
+    #responders li { display: block; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    #responders li:last-child { border-bottom: 0; }
+    .responder-head { display: flex; align-items: baseline; gap: 8px; }
+    .responder-head .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+    .role { flex: none; padding: 1px 6px; border-radius: 4px; background: var(--bg); color: var(--muted); font-size: 11px; text-transform: capitalize; }
+    .role.admin { color: var(--text); }
+    .responder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    #https-setup code { display: block; overflow-wrap: anywhere; font-size: 11px; }
+    #https-setup a { color: var(--text); text-decoration: underline; }
     .responder-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
     .responder-form input, .responder-form select { min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; font-size: 12px; }
     .responder-form button { grid-column: 1 / -1; }
@@ -144,6 +154,14 @@
         </select>
         <button class="mini" type="submit">Add responder</button>
       </form>
+      <div id="https-setup" class="sub" hidden>
+        <h2>Phones over HTTPS</h2>
+        <p>On each phone, once: download <a id="ca-link" href="/ca.crt">the Mothership certificate</a> and install it under
+          Settings &gt; Security &gt; Encryption and credentials &gt; Install a certificate &gt; CA certificate.
+          Check its SHA-256 fingerprint matches:</p>
+        <p><code id="ca-fingerprint"></code></p>
+        <p>Then set the server address on the FlareNode login screen to <code id="https-address"></code>.</p>
+      </div>
     </section>
     <section id="feed">
       <h2>Latest markers</h2>
@@ -392,18 +410,35 @@
               toast(`Password changed for ${r.name}`, 'var(--ok)');
             } catch (e) { toast(`Could not change password (${e.message})`, 'var(--hazard)'); }
           };
-          li.append(el('span', 'grow', `${r.name} (${r.id})`), el('span', 'sub', r.role), reset);
+          const head = el('div', 'responder-head');
+          const name = el('span', 'name', r.name);
+          name.title = `${r.name} (${r.id})`;
+          head.append(name, el('span', 'sub', r.id), el('span', `role ${r.role}`, r.id === claims.id ? `${r.role} · you` : r.role));
+          const actions = el('div', 'responder-actions');
+          actions.append(reset);
+          li.append(head, actions);
           if (r.id !== claims.id) {
+            // For a lost or stolen phone: the responder keeps their account
+            const cancel = el('button', 'mini', 'Cancel mesh access');
+            cancel.type = 'button';
+            cancel.onclick = async () => {
+              if (!confirm(`Cancel ${r.name}'s mesh access? From now on, phones will refuse anything their current phone signs. They keep their account and get new access by signing in again.`)) return;
+              try {
+                const result = await adminRequest(`/api/responders/${encodeURIComponent(r.id)}/cancel-mesh-access`, 'POST', {});
+                toast(result.cancelled ? `Mesh access cancelled for ${r.name}` : `${r.name} had no mesh access to cancel`, 'var(--ok)');
+              } catch (e) { toast(`Could not cancel (${e.message})`, 'var(--hazard)'); }
+            };
+            actions.append(cancel);
             const remove = el('button', 'mini danger', 'Remove');
             remove.type = 'button';
             remove.onclick = async () => {
-              if (!confirm(`Remove ${r.name} (${r.id})? They will no longer be able to sign in.`)) return;
+              if (!confirm(`Remove ${r.name} (${r.id})? They will no longer be able to sign in, and phones will refuse anything their phone signs from now on.`)) return;
               try {
                 await adminRequest(`/api/responders/${encodeURIComponent(r.id)}`, 'DELETE');
                 loadResponders();
               } catch (e) { toast(`Could not remove (${e.message})`, 'var(--hazard)'); }
             };
-            li.append(remove);
+            actions.append(remove);
           }
           list.append(li);
         }
@@ -429,10 +464,29 @@
       }
     });
 
+    async function loadHttpsSetup() {
+      const box = document.getElementById('https-setup');
+      try {
+        const info = await (await fetch('/api/tls')).json();
+        if (!info.enabled) return;
+        // The address phones would use: this page's host if it is on the network, else the first network address
+        const host = location.hostname !== 'localhost' && location.hostname !== '127.0.0.1'
+          ? location.hostname
+          : info.primary || location.hostname;
+        document.getElementById('ca-fingerprint').textContent = info.caFingerprint;
+        document.getElementById('https-address').textContent = `https://${host}:${info.port}`;
+        document.getElementById('ca-link').href = `http://${host}:${location.port || 80}/ca.crt`;
+        box.hidden = false;
+      } catch {
+        // No HTTPS details; the section stays hidden
+      }
+    }
+
     function signIn(newToken) {
       token = newToken;
       try { sessionStorage.setItem(TOKEN_KEY, newToken); } catch {}
       loadResponders();
+      loadHttpsSetup();
       // Start from a clean slate so existing markers are not announced as new
       knownMarkers = null;
       liveUplinks = new Map();

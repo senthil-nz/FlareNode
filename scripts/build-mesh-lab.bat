@@ -6,12 +6,22 @@ rem (see src\screens\MeshLabScreen.js). It has its own app id, so it installs
 rem next to the normal FlareNode app and does not replace it or touch its data.
 rem The two do talk to each other over the mesh.
 rem
-rem Usage: scripts\build-mesh-lab.bat
+rem Usage: scripts\build-mesh-lab.bat [32]
 setlocal enabledelayedexpansion
+rem Most phones are 64-bit. Pass 32 to build for an older 32-bit phone
+rem (the Galaxy A10, for one); the two builds are kept side by side.
+set "ABI=arm64-v8a"
+set "BITS="
+if /i "%~1"=="32" (
+  set "ABI=armeabi-v7a"
+  set "BITS=-32bit"
+)
 set "ROOT=%~dp0.."
 set "BUILT=%ROOT%\android\app\build\intermediates\apk\release\app-release.apk"
 set "LABDIR=%ROOT%\android\app\build\outputs\meshlab"
-set "LAB=%LABDIR%\flarenode-mesh-lab.apk"
+set "LAB=%LABDIR%\flarenode-mesh-lab%BITS%.apk"
+set "LAB64=%LABDIR%\flarenode-mesh-lab.apk"
+set "LAB32=%LABDIR%\flarenode-mesh-lab-32bit.apk"
 set "PKG=com.disaster.response.meshlab"
 
 if not exist "%ROOT%\android\gradlew.bat" (
@@ -41,8 +51,8 @@ if exist "%ROOT%\node_modules\expo-constants\android\build\generated\assets" rmd
 pushd "%ROOT%\android"
 call "%ROOT%\android\gradlew.bat" app:assembleRelease --console=plain ^
   -PappIdSuffix=.meshlab ^
-  -PreactNativeArchitectures=arm64-v8a ^
-  -Pandroid.injected.build.abi=arm64-v8a ^
+  -PreactNativeArchitectures=%ABI% ^
+  -Pandroid.injected.build.abi=%ABI% ^
   -x lint -x lintVitalRelease -x lintVitalAnalyzeRelease -x lintVitalReportRelease
 set "RC=%ERRORLEVEL%"
 popd
@@ -61,11 +71,22 @@ if not exist "%ADB%" set "ADB=adb"
 set /a INSTALLED=0
 for /f "skip=1 tokens=1,2" %%a in ('call "%ADB%" devices') do (
   if "%%b"=="device" (
-    echo === %%a: installing Mesh Lab
-    call "%ADB%" -s %%a install -r -t --user 0 "%LAB%"
-    if not errorlevel 1 (
-      call "%ADB%" -s %%a shell monkey -p %PKG% -c android.intent.category.LAUNCHER 1 >nul 2>&1
-      set /a INSTALLED+=1
+    rem Each phone gets the build that fits its processor, if that one has been built
+    set "PHONE="
+    for /f "delims=" %%i in ('call "%ADB%" -s %%a shell getprop ro.product.cpu.abi') do set "PHONE=%%i"
+    set "FITS=!LAB32!"
+    if /i "!PHONE:~0,5!"=="arm64" set "FITS=!LAB64!"
+    if exist "!FITS!" (
+      echo === %%a: installing Mesh Lab
+      call "%ADB%" -s %%a install -r -t --user 0 "!FITS!"
+      if errorlevel 1 (
+        echo === %%a: INSTALL FAILED. If it says UPDATE_INCOMPATIBLE, Mesh Lab on the phone is signed with a different key: uninstall it there first.
+      ) else (
+        call "%ADB%" -s %%a shell monkey -p %PKG% -c android.intent.category.LAUNCHER 1 >nul 2>&1
+        set /a INSTALLED+=1
+      )
+    ) else (
+      echo === %%a: a !PHONE! phone, and that build does not exist yet. Run this script with or without 32 to make it.
     )
   ) else if "%%b"=="unauthorized" (
     echo === %%a: UNAUTHORIZED - unlock the phone and tap Allow on the USB debugging prompt

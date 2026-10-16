@@ -13,3 +13,6 @@ const handle = (name) => {
 export const Lan = handle('FlareNodeLan');
 export const Aware = handle('FlareNodeAware');
 export const Bluetooth = handle('FlareNodeBluetooth');
+
+// Not a radio: keeps the mesh running when the app is not on screen
+export const Background = handle('FlareNodeBackground');

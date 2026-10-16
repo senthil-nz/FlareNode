@@ -97,6 +97,26 @@ Faults found within minutes, none of which two phones had shown:
 After the fixes, on the A10 and S24+ (the S20 FE had not yet been updated to the final build): the A10 loaded what it had, took 11 records from the Mothership, connected to both other phones, and refused nothing; the project owner confirmed the markers appeared. Still to do: the 25-second Bluetooth drop, and the relay test with the end phones out of each other's range.
 
 
+### Running in the background (2026-10-16)
+
+The mesh now runs as a foreground service with a notification while it is switched on (see `MeshForegroundService.kt`). First check, with the Galaxy S24+ and the Galaxy A10 on the new build:
+
+| Time | What happened |
+|---|---|
+| 22:07:37 | The S24+'s screen was turned off |
+| 22:07:39 | The S24+ opened a Bluetooth link to the A10, screen still off |
+| 22:08:04 | It also connected over Google Nearby, screen still off |
+| 22:08:12.4 | A marker was dropped on the A10 |
+| 22:08:13.6 | The S24+ received it, 1.2 seconds later, screen still off |
+| 22:08:16.8 | The S24+'s screen was turned back on |
+
+What it shows: with the screen off, the phone kept its radios up, made new connections and received a marker within about a second. Before this change the mesh stopped when the app left the screen.
+
+What it does not: the screen was off for about 40 seconds. Android's deeper power saving (Doze) starts only after a phone has been still with its screen off for longer, typically half an hour or more. A run of an hour or more is still to do, as is measuring the battery cost.
+
+Also seen on the same day: on the slow A10 the mesh was started twice a few seconds apart and two copies ran, handling every message twice. Fixed (starting and stopping now happen one at a time). And both of the A10's Bluetooth links dropped at the same moment and came back a second later, which points at that phone's Bluetooth.
+
+
 Rules adopted from the start so the transport can be swapped later:
 
 - **Own the identity.** Each phone has its own mesh node id and name; a transport's temporary connection handles are never used above the transport.

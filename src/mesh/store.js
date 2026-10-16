@@ -1,10 +1,14 @@
 import { Emitter } from './emitter.js';
 import { HybridClock, compareVersions, versionMillis, nextAfter } from './clock.js';
-import { CERTIFICATES } from './policy.js';
+import { CERTIFICATES, CANCELLATIONS } from './policy.js';
 
-// Certificates take their versions from their expiry dates, months ahead, not
-// from when they were written, so they must not move this phone's clock.
-const movesClock = (record) => record.collection !== CERTIFICATES;
+// Certificates and cancellations go ahead of the records they decide on
+const checkFirst = (name) => (name === CERTIFICATES ? 2 : name === CANCELLATIONS ? 1 : 0);
+
+// Certificates and cancellations take their versions from dates the
+// Mothership sets (a certificate's expiry, months ahead), not from when they
+// were written, so they must not move this phone's clock.
+const movesClock = (record) => record.collection !== CERTIFICATES && record.collection !== CANCELLATIONS;
 
 /**
  * The on-device document store.
@@ -165,7 +169,7 @@ export class MeshStore extends Emitter {
   recordsNewerThan(peerDigest = {}) {
     const out = [];
     // Certificates go first, so the receiver can check the records that follow
-    const names = Object.keys(peerDigest).sort((a, b) => (b === CERTIFICATES) - (a === CERTIFICATES));
+    const names = Object.keys(peerDigest).sort((a, b) => checkFirst(b) - checkFirst(a));
     for (const name of names) {
       const theirs = peerDigest[name] || {};
       for (const [id, record] of this._collection(name)) {
@@ -198,9 +202,10 @@ export class MeshStore extends Emitter {
    */
   applyRemote(records, origin) {
     const accepted = [];
+    const cancelled = [];
     const horizon = this._horizon();
     // Certificates first, whatever order they arrived in
-    const ordered = [...records].sort((a, b) => (b?.collection === CERTIFICATES) - (a?.collection === CERTIFICATES));
+    const ordered = [...records].sort((a, b) => checkFirst(b?.collection) - checkFirst(a?.collection));
     for (const record of ordered) {
       if (!isValidRecord(record)) continue;
       const existing = this._collection(record.collection).get(record.id);
@@ -218,8 +223,12 @@ export class MeshStore extends Emitter {
       if (record.auth) stored.auth = { k: record.auth.k, sig: record.auth.sig };
       this._put(stored);
       accepted.push(stored);
+      if (stored.collection === CANCELLATIONS) cancelled.push(stored.fields);
     }
     if (accepted.length > 0) this._changed(accepted, origin);
+    // What the cancelled key signed after its cancellation may already be
+    // here, taken before the cancellation was known. It goes now.
+    for (const cancellation of cancelled) this._dropSignedAfter(cancellation);
     return accepted;
   }
 
@@ -297,7 +306,14 @@ export class MeshStore extends Emitter {
     if (!this.policy) return { ok: true };
     // The signature must cover the fields the record arrived with
     const candidate = record.fields._id === record.id ? record : { ...record, fields: { ...record.fields, _id: record.id } };
-    return this.policy.check(candidate, existing, (id) => this.get(CERTIFICATES, id));
+    return this.policy.check(candidate, existing, (id) => this.get(CERTIFICATES, id), (id) => this.get(CANCELLATIONS, id));
+  }
+
+  _dropSignedAfter({ cert, at }) {
+    const dropped = this.removeWhere((record) =>
+      record.collection !== CERTIFICATES && record.collection !== CANCELLATIONS &&
+      record.auth?.k === cert && versionMillis(record.version) > at);
+    if (dropped > 0) this.emit('cancelledRecords', { cert, dropped });
   }
 
   _horizon() {

@@ -23,6 +23,8 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mothership-test-'));
 const env = {
   ...process.env,
   PORT,
+  HTTPS_PORT: String(Number(PORT) + 1000),
+  TLS_DIR: path.join(directory, 'tls'),
   SQLITE_PATH: path.join(directory, 'test.sqlite'),
   JWT_SECRET: 'test-jwt-secret',
   VALIDATOR_API_KEY: 'test-validator-key',
@@ -265,6 +267,58 @@ test('mesh: a signed removal is handed on too, and an older copy does not replac
   assert.equal(mesh.verifyRecord(ed25519, phone.certificate, handed), true);
 });
 
+test('mesh: cancelling the mesh access of a responder is signed, handed to phones, and stops the key being certified again', async () => {
+  assert.equal((await call('POST', '/api/responders', { token: admin, body: { id: 'delta', name: 'Responder Delta', password: 'delta-pass-123' } })).status, 201);
+  const delta = (await login('delta', 'delta-pass-123')).json.token;
+  const phone = await enrol(delta);
+  assert.equal(phone.response.status, 200);
+  const cert = mesh.certificateId(phone.certificate);
+
+  // Only admins may cancel, and only someone who exists
+  assert.equal((await call('POST', '/api/responders/delta/cancel-mesh-access', { token: alpha, body: {} })).status, 403);
+  assert.equal((await call('POST', '/api/responders/nobody/cancel-mesh-access', { token: admin, body: {} })).status, 404);
+
+  const cancelled = await call('POST', '/api/responders/delta/cancel-mesh-access', { token: admin, body: {} });
+  assert.equal(cancelled.status, 200);
+  assert.equal(cancelled.json.cancelled, 1);
+  assert.equal((await call('POST', '/api/responders/delta/cancel-mesh-access', { token: admin, body: {} })).json.cancelled, 0, 'already cancelled');
+
+  // Phones are given it, and the app's own code accepts it as the Mothership's
+  const pulled = (await call('GET', '/api/sync/markers', { token: alpha })).json;
+  const notice = pulled.cancellations.find((item) => item.cert === cert);
+  assert.ok(notice);
+  assert.equal(mesh.verifyCancellation(ed25519, phone.authorityKey, notice), true);
+  assert.ok(notice.at <= Date.now());
+
+  // The cancelled key is not certified again; a new key is
+  const again = await call('POST', '/api/mesh/enroll', { token: delta, body: { key: phone.publicKey } });
+  assert.equal(again.status, 403);
+  assert.equal(again.json.errorCode, 'KEY_CANCELLED');
+  assert.equal((await enrol(delta)).response.status, 200);
+});
+
+test('mesh: changing the role of a responder, or removing them, cancels their certificates', async () => {
+  assert.equal((await call('POST', '/api/responders', { token: admin, body: { id: 'echo', name: 'Responder Echo', password: 'echo-pass-1234' } })).status, 201);
+  const echo = (await login('echo', 'echo-pass-1234')).json.token;
+  const first = await enrol(echo);
+  const cancellationsFor = async (id) => (await call('GET', '/api/sync/markers', { token: admin })).json.cancellations.filter((item) => item.id === id);
+
+  // A name change does not cancel anything
+  assert.equal((await call('PUT', '/api/responders/echo', { token: admin, body: { name: 'Echo' } })).status, 200);
+  assert.equal((await cancellationsFor('echo')).length, 0);
+
+  // Promotion does: the certificate names the old role
+  assert.equal((await call('PUT', '/api/responders/echo', { token: admin, body: { role: 'admin' } })).status, 200);
+  assert.deepEqual((await cancellationsFor('echo')).map((item) => item.cert), [mesh.certificateId(first.certificate)]);
+
+  // A new key gets a certificate with the new role; removing the responder cancels that one too
+  const echoAsAdmin = (await login('echo', 'echo-pass-1234')).json.token;
+  const second = await enrol(echoAsAdmin);
+  assert.equal(second.certificate.role, 'admin');
+  assert.equal((await call('DELETE', '/api/responders/echo', { token: admin })).status, 200);
+  assert.equal((await cancellationsFor('echo')).length, 2);
+});
+
 test('dead zones: uploaded, shown, exported, and cleared ones stay cleared', async () => {
   const gap = { _id: 't-gap-1', latitude: -41.3, longitude: 174.8, timestamp: 2000 };
   await call('POST', '/api/sync/gaps', { token: alpha, body: [gap, { _id: 't-gap-zero', latitude: 0, longitude: 0, timestamp: 1 }] });
@@ -307,6 +361,36 @@ test('validator feed: needs its API key', async () => {
   const feed = await call('GET', '/api/feed/validator', { headers: { 'x-api-key': 'test-validator-key' } });
   assert.equal(feed.status, 200);
   assert.equal(feed.json.type, 'FeatureCollection');
+});
+
+test('https: served with a certificate from the Mothership’s own authority, which phones can download', async () => {
+  const https = require('node:https');
+  const tls = require('node:tls');
+  const info = (await call('GET', '/api/tls')).json;
+  assert.equal(info.enabled, true);
+  assert.match(info.caFingerprint, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+  assert.ok(info.addresses.includes('127.0.0.1'));
+
+  const ca = await call('GET', '/ca.crt');
+  assert.equal(ca.status, 200);
+  assert.match(ca.text, /BEGIN CERTIFICATE/);
+
+  // Trusting only that certificate, HTTPS works and the API answers
+  const request = (options) => new Promise((resolve, reject) => {
+    const req = https.request({ host: '127.0.0.1', port: env.HTTPS_PORT, path: '/api/tls', ...options }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+  const answer = await request({ ca: ca.text });
+  assert.equal(answer.status, 200);
+  assert.equal(JSON.parse(answer.body).caFingerprint, info.caFingerprint);
+
+  // Without it, the connection is refused as untrusted
+  await assert.rejects(() => request({ ca: tls.rootCertificates }), /self.signed|unable to verify|certificate/i);
 });
 
 test('the dashboard page is served', async () => {

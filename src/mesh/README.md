@@ -144,12 +144,21 @@ What this means in practice:
 
 What it does not do:
 
-- **No revocation.** A responder who is removed, or demoted from admin, keeps the powers in their certificate until it expires. There is no way yet to cancel one early.
+- **Cancelling takes time to spread.** An admin can cancel a responder's certificate (see Cancelling below), but a phone only refuses the cancelled key once the cancellation reaches it, through the Mothership or another phone. Until then it accepts what that key signs, and drops it when the cancellation arrives. A cancelled key could also back-date what it signs to before the cancellation; those records would be accepted. Neither is solved.
 - **Admins are fully trusted.** An admin can change or remove anything, and can write a marker naming someone else as author.
 - **The authority key is the root of trust.** Anyone who obtains the Mothership's authority key can mint an admin certificate. It lives in the Mothership's database (or `MESH_AUTHORITY_KEY`).
 - **A phone trusts the authority key it is given at sign-in**, over plain HTTP on the local network. Someone able to impersonate the Mothership at that moment could hand it a different one.
 - **Signature checks cost time.** Each is a few milliseconds on a laptop and more on a phone; a first sync of hundreds of records will take noticeably longer than before. Not measured on a phone yet.
 - **Refused records are offered again.** A phone holding a record the others refuse will offer it at every sync and be refused each time. Harmless, but wasteful.
+
+### Cancelling
+
+An admin can cancel a responder's mesh access from the dashboard ("Cancel mesh access"), for a lost or stolen phone. Removing a responder, or changing their role, does it as well, so a former admin cannot go on acting as one until their certificate runs out.
+
+- The Mothership signs a **cancellation** naming the certificate and the moment it was cancelled. It travels through the mesh like a certificate, ahead of the records it decides on.
+- Every phone refuses anything that key signs after that moment. What it signed before stays valid, so a departing responder's hazard markers do not vanish with them.
+- A record a phone took before the cancellation reached it goes when the cancellation arrives.
+- A cancelled key is never certified again. The responder's phone makes a new key the next time it reaches the Mothership, if they still have an account.
 
 ## Who may join, and privacy
 
@@ -201,7 +210,7 @@ They all run on the pretend radio.
 - **Testing further.** Still to try: three phones in a chain, phones moving out of range and back, larger amounts of data over Bluetooth, and the app in the background.
 - **iOS.** Nearby Connections is built in for Android only, so an iPhone has no radio layer and would sync only through the Mothership.
 - **Faster reconnection.** After Wi-Fi was switched off the phones took about 27 seconds and several failed attempts to find each other again over Bluetooth. Overlapping attempts have since been removed, which should help; it has not been re-measured.
-- **Cancelling a certificate early**, for a responder who is removed or loses admin rights.
+- **Spreading a cancellation faster** than ordinary sync, and refusing back-dated records from a cancelled key.
 - **Very large stores.** Everything is held in memory, and when two phones differ in a collection they list every record in it. Fine for thousands of records; tens of thousands would want something smarter.
 - **Moving existing data.** Markers from the Ditto build are not signed, so they do not carry over to the signed mesh at all. The move off Ditto started with an empty map.
 

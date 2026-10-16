@@ -33,3 +33,6 @@ modules/*/android/build/
 
 # Demo material is kept locally, not in the repository
 demo/
+
+# The Mothership's HTTPS keys and certificates, made on first start
+mothership-server/tls/

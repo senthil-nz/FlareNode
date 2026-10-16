@@ -11,8 +11,8 @@ import { createSqlPersistence } from '../sqlPersistence.js';
 import { LoopbackHub } from '../loopbackTransport.js';
 import { SyncEngine } from '../syncEngine.js';
 import { toBase64, fromBase64, canonicalJson } from '../bytes.js';
-import { createAuthority, verifyCertificate, signRecord, verifyRecord, generateKeyPair, certificateId } from '../identity.js';
-import { createPolicy, certificateRecord, CERTIFICATES } from '../policy.js';
+import { createAuthority, verifyCertificate, verifyCancellation, signRecord, verifyRecord, generateKeyPair, certificateId } from '../identity.js';
+import { createPolicy, certificateRecord, cancellationRecord, CERTIFICATES, CANCELLATIONS } from '../policy.js';
 
 console.log = () => {};
 
@@ -98,7 +98,7 @@ const storeAs = (identity, known = []) => {
 };
 
 // Hands every record one store holds to another, as a peer would
-const offer = (from, to) => to.applyRemote(from.recordsNewerThan(to.digest([CERTIFICATES, 'tactical_markers', 'connectivity_logs', 'quake_feed'])), 'peer');
+const offer = (from, to) => to.applyRemote(from.recordsNewerThan(to.digest([CERTIFICATES, CANCELLATIONS, 'tactical_markers', 'connectivity_logs', 'quake_feed'])), 'peer');
 
 test('rules: a responder adds markers as themselves and removes their own', () => {
   const alpha = identityFor('alpha');
@@ -486,12 +486,107 @@ test('sync: a record a phone refuses is not sent to it again at every sync', asy
   await b.stop();
 });
 
-// Found while adding to this change: a certificate's record version follows
-// its expiry, months ahead, and every phone that received one moved its clock
-// that far forward, so everything it wrote afterwards was stamped months ahead.
-test('clock: certificates do not move the clock of a phone', () => {
+// ---- Cancelling a certificate
+
+// A record written by `identity` at `millis`, signed the way the app signs it
+const writtenAt = (identity, millis, extra = {}) => {
+  const id = `${identity.certificate.id}-${millis}`;
+  const record = {
+    collection: 'tactical_markers',
+    id,
+    version: `${String(millis).padStart(15, '0')}:00000:n`,
+    fields: { _id: id, author_id: identity.certificate.id, type: 'hazard', ...extra },
+  };
+  record.auth = signRecord(ed, fromBase64(identity.privateKey), certificateId(identity.certificate), record);
+  return record;
+};
+
+const freshReader = (identities) => {
+  const reader = new MeshStore({ nodeId: 'reader', policy: createPolicy({ ed, authorityKey: authority.publicKey }) });
+  reader.applyRemote(identities.map((item) => certificateRecord(item.certificate)), 'setup');
+  return reader;
+};
+
+test('cancelling: nothing signed after the cancellation is accepted; what came before stays', () => {
+  const now = Date.now();
   const alpha = identityFor('alpha');
-  const phone = storeAs(alpha, [identityFor('bravo')]); // has taken two certificates, each expiring in 90 days
+  const cancellation = authority.cancel({ cert: certificateId(alpha.certificate), id: 'alpha', at: now });
+  assert.equal(verifyCancellation(ed, authority.publicKey, cancellation), true);
+
+  const reader = freshReader([alpha]);
+  assert.equal(reader.applyRemote([cancellationRecord(cancellation)], 'peer').length, 1);
+  assert.equal(reader.applyRemote([writtenAt(alpha, now - 60000)], 'peer').length, 1, 'written before: kept');
+  assert.equal(reader.applyRemote([writtenAt(alpha, now + 60000)], 'peer').length, 0, 'written after: refused');
+
+  // Other responders are not affected
+  const bravo = identityFor('bravo');
+  reader.applyRemote([certificateRecord(bravo.certificate)], 'setup');
+  assert.equal(reader.applyRemote([writtenAt(bravo, now + 60000)], 'peer').length, 1);
+});
+
+test('cancelling: records taken before the cancellation was known go when it arrives', () => {
+  const now = Date.now();
+  const alpha = identityFor('alpha');
+  const reader = freshReader([alpha]);
+  reader.applyRemote([writtenAt(alpha, now - 60000), writtenAt(alpha, now + 60000)], 'peer');
+  assert.equal(reader.all('tactical_markers').length, 2);
+
+  const cancellation = authority.cancel({ cert: certificateId(alpha.certificate), id: 'alpha', at: now });
+  reader.applyRemote([cancellationRecord(cancellation)], 'peer');
+  assert.deepEqual(reader.all('tactical_markers').map((doc) => doc._id), [`alpha-${now - 60000}`]);
+});
+
+test('cancelling: a cancellation not issued by the Mothership is refused', () => {
+  const alpha = identityFor('alpha');
+  const impostor = createAuthority(ed, random(32));
+  const forged = impostor.cancel({ cert: certificateId(alpha.certificate), id: 'alpha', at: Date.now() - DAY });
+  const reader = freshReader([alpha]);
+
+  assert.deepEqual(reader.applyRemote([cancellationRecord(forged)], 'peer'), []);
+  assert.equal(reader.applyRemote([writtenAt(alpha, Date.now())], 'peer').length, 1, 'alpha is unaffected');
+
+  // A genuine cancellation altered to name a different certificate fails too
+  const genuine = authority.cancel({ cert: certificateId(alpha.certificate), id: 'alpha', at: Date.now() });
+  const bravo = identityFor('bravo');
+  const altered = { ...genuine, cert: certificateId(bravo.certificate), id: 'bravo' };
+  assert.equal(verifyCancellation(ed, authority.publicKey, altered), false);
+});
+
+test('cancelling: a cancellation spreads between phones, and the cancelled phone cannot write', () => {
+  const now = Date.now();
+  const alpha = identityFor('alpha');
+  const bravo = identityFor('bravo');
+  const a = storeAs(alpha, [bravo]);
+  const b = storeAs(bravo, [alpha]);
+  const cancellation = authority.cancel({ cert: certificateId(alpha.certificate), id: 'alpha', at: now - 1000 });
+
+  b.applyRemote([cancellationRecord(cancellation)], 'mothership');
+  offer(b, a);
+  assert.ok(a.get(CANCELLATIONS, certificateId(alpha.certificate)), 'the cancellation reached alpha');
+  assert.throws(() => a.upsert('tactical_markers', { _id: 'alpha-late', type: 'hazard', author_id: 'alpha' }), /cancelled/);
+});
+
+test('cancelling: the earliest cancellation of a certificate stands', () => {
+  const alpha = identityFor('alpha');
+  const cert = certificateId(alpha.certificate);
+  const early = authority.cancel({ cert, id: 'alpha', at: 1000 * DAY });
+  const late = authority.cancel({ cert, id: 'alpha', at: 2000 * DAY });
+  const reader = freshReader([alpha]);
+  reader.applyRemote([cancellationRecord(late)], 'peer');
+  reader.applyRemote([cancellationRecord(early)], 'peer');
+  assert.equal(reader.get(CANCELLATIONS, cert).at, early.at);
+  assert.equal(reader.applyRemote([cancellationRecord(late)], 'peer').length, 0);
+});
+
+// Found the same day: a certificate's record version follows its expiry,
+// months ahead, and every phone that received one moved its clock that far
+// forward, so everything it wrote afterwards was stamped months in the future.
+test('clock: certificates and cancellations do not move the clock of a phone', () => {
+  const alpha = identityFor('alpha');
+  const bravo = identityFor('bravo');
+  const phone = storeAs(alpha, [bravo]); // has taken two certificates, each expiring in 90 days
+  const cancellation = authority.cancel({ cert: certificateId(bravo.certificate), id: 'bravo', at: Date.now() + 30 * DAY });
+  phone.applyRemote([cancellationRecord(cancellation)], 'peer');
   phone.upsert('tactical_markers', { _id: 'alpha-1', type: 'hazard', author_id: 'alpha' });
   const written = phone.recordsNewerThan({ tactical_markers: {} })[0].version;
   assert.ok(versionMillis(written) < Date.now() + 60 * 1000, 'stamped with the real time, not months ahead');
