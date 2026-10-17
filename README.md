@@ -6,7 +6,7 @@ FlareNode lets responders share what they see on a map (hazards, resources, dead
 
 > **Experimental software.** FlareNode is a working prototype tried on three phones. Its security design has not been independently reviewed. Do not rely on it where lives depend on it.
 
-FlareNode was submitted to the IEEE Impact Challenge 2026; the result was not known at the time of writing. The version demonstrated there was 2.0.0-beta.1, which used the proprietary Ditto SDK for phone-to-phone sync; everything since has replaced that with FlareNode's own open mesh.
+FlareNode was submitted to the IEEE Response Quest Challenge 2026, one of the IEEE Impact Challenges; the result was not known at the time of writing. The version demonstrated there was 2.0.0-beta.1, which used the proprietary Ditto SDK for phone-to-phone sync; everything since has replaced that with FlareNode's own open mesh.
 
 ## 📸 Screenshots
 
